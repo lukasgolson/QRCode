@@ -10,21 +10,11 @@ from tensorflow.keras import Sequential
 image_dir = 'data/images'
 content_dir = 'data/contents'
 
-# Helper function to load images
-def load_image(filename, target_size=(256, 256)):
-    img = Image.open(filename).convert('L')  # Convert image to grayscale
-    img = img.resize(target_size)
-    return np.array(img)
 
-# Helper function to load text contents
-def load_content(filename):
-    with open(filename, 'r') as file:
-        content = file.read().strip()
-    return content
 
 # Data generator for images and text content
 class QRDataGenerator(tf.keras.utils.Sequence):
-    def __init__(self, image_dir, content_dir, batch_size=32, target_size=(256, 256), max_sequence_length=50, num_chars=1000):
+    def __init__(self, image_dir, content_dir, batch_size=32, target_size=(256, 256), max_sequence_length=512, num_chars=1000):
         self.image_dir = image_dir
         self.content_dir = content_dir
         self.batch_size = batch_size
@@ -79,57 +69,71 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         with open(os.path.join(self.content_dir, filename), 'r') as file:
             return file.read().strip()
 
-# Define model parameters
-max_sequence_length = 32  # Based on dataset
-num_chars = 1000  # Unique characters in the data
 
-# Build the model
-model = Sequential()
 
-# Input layer for images
-model.add(Input(shape=(256, 256, 1)))
+# Check available GPUs
+gpus = tf.config.list_physical_devices('GPU')
+print(f"GPUs: {gpus}")
 
-# CNN for image feature extraction
-model.add(Conv2D(64, (3, 3), activation='relu'))
-model.add(BatchNormalization())
-model.add(MaxPooling2D((2, 2)))
+# Define the strategy for multi-GPU training
+strategy = tf.distribute.MirroredStrategy()
 
-# Second block
-model.add(Conv2D(128, (3, 3), activation='relu'))
-model.add(BatchNormalization())
-model.add(MaxPooling2D((2, 2)))
+# Print the number of devices being used for training
+print(f"Number of devices: {strategy.num_replicas_in_sync}")
 
-# Third block
-model.add(Conv2D(256, (3, 3), activation='relu'))
-model.add(BatchNormalization())
-model.add(MaxPooling2D((2, 2)))
+with strategy.scope():
 
-# Fourth block
-model.add(Conv2D(512, (3, 3), activation='relu'))
-model.add(BatchNormalization())
-model.add(MaxPooling2D((2, 2)))
+    # Define model parameters
+    max_sequence_length = 512  # Based on dataset
+    num_chars = 1000  # Unique characters in the data
 
-# Flatten the output
-model.add(Flatten())
+    # Build the model
+    model = Sequential()
 
-# Dense layer to produce a feature vector for sequence prediction
-model.add(Dense(512, activation='relu'))
+    # Input layer for images
+    model.add(Input(shape=(256, 256, 1)))
 
-# Reshape the output to match the number of time steps (max_sequence_length)
-model.add(Reshape((max_sequence_length, -1)))  # Reshape to (sequence_length, feature_size)
+    # CNN for image feature extraction
+    model.add(Conv2D(64, (3, 3), activation='relu'))
+    model.add(BatchNormalization())
+    model.add(MaxPooling2D((2, 2)))
 
-# TimeDistributed Dense layers for outputting character predictions at each time step
-model.add(TimeDistributed(Dense(num_chars, activation='softmax')))
+    # Second block
+    model.add(Conv2D(128, (3, 3), activation='relu'))
+    model.add(BatchNormalization())
+    model.add(MaxPooling2D((2, 2)))
 
-# Compile the model
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    # Third block
+    model.add(Conv2D(256, (3, 3), activation='relu'))
+    model.add(BatchNormalization())
+    model.add(MaxPooling2D((2, 2)))
+
+    # Fourth block
+    model.add(Conv2D(512, (3, 3), activation='relu'))
+    model.add(BatchNormalization())
+    model.add(MaxPooling2D((2, 2)))
+
+    # Flatten the output
+    model.add(Flatten())
+
+    # Dense layer to produce a feature vector for sequence prediction
+    model.add(Dense(512, activation='relu'))
+
+    # Reshape the output to match the number of time steps (max_sequence_length)
+    model.add(Reshape((max_sequence_length, -1)))  # Reshape to (sequence_length, feature_size)
+
+    # TimeDistributed Dense layers for outputting character predictions at each time step
+    model.add(TimeDistributed(Dense(num_chars, activation='softmax')))
+
+    # Compile the model
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
 # Show the model summary
 model.summary()
 
 # Create the QRDataGenerator instance
-batch_size = 32
-epochs = 10
+batch_size = 16
+epochs = 20
 qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size, max_sequence_length=max_sequence_length, num_chars=num_chars)
 
 # Train the model
