@@ -5,9 +5,9 @@ import keras
 import numpy as np
 from PIL import Image
 import tensorflow as tf
-from keras.models import Model
-from keras import layers
-from tensorflow.keras.layers import TextVectorization, Dropout
+from keras import layers, Layer, Model
+from keras.src.layers import Conv2D, MaxPooling2D, Flatten, LayerNormalization
+from tensorflow.keras.layers import TextVectorization, Dropout, Dense
 from tensorflow.keras.utils import to_categorical
 
 from layers.involution import Involution
@@ -96,6 +96,107 @@ class QRDataGenerator(tf.keras.utils.Sequence):
 
 # Spatial Transformer Layer
 
+class SpatialTransformerInputHead(Layer):
+    def __init__(self, **kwargs):
+        super(SpatialTransformerInputHead, self).__init__(**kwargs)
+
+        # Localization head layers
+        self.conv1 = Conv2D(14, (5, 5), padding='valid', activation='relu')
+        self.pool1 = MaxPooling2D((2, 2), strides=2)
+        self.conv2 = Conv2D(32, (5, 5), padding='valid', activation='relu')
+        self.pool2 = MaxPooling2D((2, 2), strides=2)
+        self.flatten = Flatten()
+        self.dense1 = Dense(120, activation='relu')
+        self.dropout = Dropout(0.2)
+        self.dense2 = Dense(84, activation='relu')
+        self.output_layer = Dense(6, activation='linear',
+                                  kernel_initializer='zeros',
+                                  bias_initializer=lambda shape, dtype: tf.constant([1, 0, 0, 0, 1, 0], dtype=dtype))
+
+    def generate_normalized_homo_meshgrids(self, inputs):
+        batch_size = tf.shape(inputs)[0]
+        _, H, W, _ = inputs.shape
+        x_range = tf.range(W)
+        y_range = tf.range(H)
+        x_mesh, y_mesh = tf.meshgrid(x_range, y_range)
+        x_mesh = (x_mesh / W - 0.5) * 2
+        y_mesh = (y_mesh / H - 0.5) * 2
+        y_mesh = tf.reshape(y_mesh, (*y_mesh.shape, 1))
+        x_mesh = tf.reshape(x_mesh, (*x_mesh.shape, 1))
+        ones_mesh = tf.ones_like(x_mesh)
+        homogeneous_grid = tf.concat([x_mesh, y_mesh, ones_mesh], -1)
+        homogeneous_grid = tf.reshape(homogeneous_grid, (-1, 3, 1))
+        homogeneous_grid = tf.cast(homogeneous_grid, tf.float32)
+        homogeneous_grid = tf.expand_dims(homogeneous_grid, 0)
+        return tf.tile(homogeneous_grid, [batch_size, 1, 1, 1])
+
+    def transform_grids(self, transformations, grids, inputs):
+        trans_matrices = tf.reshape(transformations, (-1, 2, 3))
+        batch_size = tf.shape(trans_matrices)[0]
+        gs = tf.squeeze(grids, -1)
+        reprojected_grids = tf.matmul(trans_matrices, gs, transpose_b=True)
+        reprojected_grids = (tf.linalg.matrix_transpose(reprojected_grids) + 1) * 0.5
+        _, H, W, _ = inputs.shape
+        return tf.multiply(reprojected_grids, [W, H])
+
+    def generate_four_neighbors_from_reprojection(self, inputs, reprojected_grids):
+        _, H, W, _ = inputs.shape
+        x, y = tf.split(reprojected_grids, 2, axis=-1)
+        x1 = tf.floor(x)
+        x1 = tf.cast(x1, tf.int32)
+        x2 = x1 + tf.constant(1)
+        y1 = tf.floor(y)
+        y1 = tf.cast(y1, tf.int32)
+        y2 = y1 + tf.constant(1)
+        y_max = tf.constant(H - 1, dtype=tf.int32)
+        x_max = tf.constant(W - 1, dtype=tf.int32)
+        zero = tf.zeros([1], dtype=tf.int32)
+        x1_safe = tf.clip_by_value(x1, zero, x_max)
+        y1_safe = tf.clip_by_value(y1, zero, y_max)
+        x2_safe = tf.clip_by_value(x2, zero, x_max)
+        y2_safe = tf.clip_by_value(y2, zero, y_max)
+        return x1_safe, y1_safe, x2_safe, y2_safe
+
+    def bilinear_sample(self, inputs, reprojected_grids):
+        x1, y1, x2, y2 = self.generate_four_neighbors_from_reprojection(inputs, reprojected_grids)
+        x1y1 = tf.concat([y1, x1], -1)
+        x1y2 = tf.concat([y2, x1], -1)
+        x2y1 = tf.concat([y1, x2], -1)
+        x2y2 = tf.concat([y2, x2], -1)
+        pixel_x1y1 = tf.gather_nd(inputs, x1y1, batch_dims=1)
+        pixel_x1y2 = tf.gather_nd(inputs, x1y2, batch_dims=1)
+        pixel_x2y1 = tf.gather_nd(inputs, x2y1, batch_dims=1)
+        pixel_x2y2 = tf.gather_nd(inputs, x2y2, batch_dims=1)
+        x, y = tf.split(reprojected_grids, 2, axis=-1)
+        wx = tf.concat([tf.cast(x2, tf.float32) - x, x - tf.cast(x1, tf.float32)], -1)
+        wx = tf.expand_dims(wx, -2)
+        wy = tf.concat([tf.cast(y2, tf.float32) - y, y - tf.cast(y1, tf.float32)], -1)
+        wy = tf.expand_dims(wy, -1)
+        Q = tf.concat([pixel_x1y1, pixel_x1y2, pixel_x2y1, pixel_x2y2], -1)
+        Q_shape = tf.shape(Q)
+        Q = tf.reshape(Q, (Q_shape[0], Q_shape[1], 2, 2))
+        r = wx @ Q @ wy
+        _, H, W, channels = inputs.shape
+        r = tf.reshape(r, (-1, H, W, 1))
+        return r
+
+    def call(self, inputs):
+        # Compute transformations using localization head
+        x = self.conv1(inputs)
+        x = self.pool1(x)
+        x = self.conv2(x)
+        x = self.pool2(x)
+        x = self.flatten(x)
+        x = self.dense1(x)
+        x = self.dropout(x)
+        x = self.dense2(x)
+        transformations = self.output_layer(x)
+
+        # Apply spatial transformation
+        grids = self.generate_normalized_homo_meshgrids(inputs)
+        reprojected_grids = self.transform_grids(transformations, grids, inputs)
+        return self.bilinear_sample(inputs, reprojected_grids)
+
 
 gpus = tf.config.list_physical_devices('GPU')
 print(f"GPUs: {gpus}")
@@ -145,35 +246,35 @@ def create_involution_architecture(input_tensor, length):
 
 
 def create_model(input_shape, max_sequence_length, num_chars):
+    # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    # dense layer for initial processing
+    # Instantiate the SpatialTransformerInputHead
+    processing_head = SpatialTransformerInputHead()(inputs)  # Ensure the output is used correctly
 
-    head = inputs
-
-    # Build the involution architecture
-    x = create_involution_architecture(head, 2)
-
+    # Build the involution architecture (assuming this is defined elsewhere)
+    x = create_involution_architecture(processing_head, 2)
     x = layers.BatchNormalization()(x)  # Add Batch Normalization
     x = Dropout(0.25)(x)
 
+
+    # Add positional encoding to the sequence
+    pos_encoding = positional_encoding(max_sequence_length, x.shape[-1])
+    x += pos_encoding
     x = layers.Dense(256, activation='relu')(x)
     x = layers.Dense(256, activation='relu')(x)
     x = layers.Dense(256, activation='relu')(x)
 
-    x = Dropout(0.25)(x)
+
+    # reduce to 512X512X1
+    x = layers.Conv2D(1, (1, 1), activation='relu')(x)
 
 
-
-
-# Flatten and reshape for sequence prediction
+    # Flatten and reshape for sequence prediction
     sequence = layers.Flatten()(x)
     sequence = layers.Dense(max_sequence_length, activation='relu')(sequence)
     sequence = layers.Reshape((max_sequence_length, -1))(sequence)  # Reshape to (sequence_length, feature_size)
 
-    # Add positional encoding to the sequence
-    pos_encoding = positional_encoding(max_sequence_length, sequence.shape[-1])
-    sequence += pos_encoding
 
     outputs = layers.TimeDistributed(layers.Dense(num_chars, activation='softmax'))(sequence)
 
@@ -186,6 +287,8 @@ num_chars = 128  # Unique characters in the data
 target_image_size = 512  # Image pixel size (length and width)
 
 input_shape = (target_image_size, target_image_size, 1)  # Define the input shape for the images
+
+
 model = create_model(input_shape, max_sequence_length, num_chars)
 
 # Compile the model
@@ -195,7 +298,7 @@ model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accur
 model.summary()
 
 # Create the QRDataGenerator instance
-batch_size = 32
+batch_size = 24
 epochs = 1
 qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size, max_sequence_length=max_sequence_length,
                               num_chars=num_chars, target_size=(target_image_size, target_image_size))
