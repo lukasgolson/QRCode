@@ -3,9 +3,11 @@ import os
 import numpy as np
 from PIL import Image
 import tensorflow as tf
-from tensorflow.keras.layers import TextVectorization, Conv2D, MaxPooling2D, BatchNormalization, Flatten, Dense, Reshape, TimeDistributed, Input
+from tensorflow.keras.layers import TextVectorization, Conv2D, MaxPooling2D, BatchNormalization, Flatten, Dense, \
+    Reshape, TimeDistributed, Input, Dropout
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras import Sequential
+from tensorflow.python.keras.regularizers import l2
 
 # Paths to directories
 image_dir = 'data/images'
@@ -100,43 +102,32 @@ strategy = tf.distribute.MirroredStrategy()
 # Print the number of devices being used for training
 print(f"Number of devices: {strategy.num_replicas_in_sync}")
 
-with strategy.scope():
+# Define model parameters
+max_sequence_length = 512  # Based on dataset
+num_chars = 1000  # Unique characters in the data
 
-    # Define model parameters
-    max_sequence_length = 512  # Based on dataset
-    num_chars = 1000  # Unique characters in the data
+target_image_size = 512
+
+with strategy.scope():
 
     # Build the model
     model = Sequential()
 
     # Input layer for images
-    model.add(Input(shape=(256, 256, 1)))
+    model.add(Input(shape=(target_image_size, target_image_size, 1)))
 
     # CNN for image feature extraction
-    model.add(Conv2D(64, (3, 3), activation='relu'))
-    model.add(BatchNormalization())
-    model.add(MaxPooling2D((2, 2)))
-
-    # Second block
-    model.add(Conv2D(128, (3, 3), activation='relu'))
-    model.add(BatchNormalization())
-    model.add(MaxPooling2D((2, 2)))
-
-    # Third block
-    model.add(Conv2D(256, (3, 3), activation='relu'))
-    model.add(BatchNormalization())
-    model.add(MaxPooling2D((2, 2)))
-
-    # Fourth block
-    model.add(Conv2D(512, (3, 3), activation='relu'))
-    model.add(BatchNormalization())
-    model.add(MaxPooling2D((2, 2)))
+    for filters in [16, 64, 128, 256, 512]:
+        model.add(Conv2D(filters, (3, 3), activation='relu', padding='same'))
+        model.add(BatchNormalization())
+        model.add(MaxPooling2D((2, 2)))
+        model.add(Dropout(0.3))
 
     # Flatten the output
     model.add(Flatten())
 
     # Dense layer to produce a feature vector for sequence prediction
-    model.add(Dense(512, activation='relu'))
+    model.add(Dense(512, activation='relu', kernel_regularizer=l2(0.001)))
 
     # Reshape the output to match the number of time steps (max_sequence_length)
     model.add(Reshape((max_sequence_length, -1)))  # Reshape to (sequence_length, feature_size)
@@ -153,7 +144,7 @@ model.summary()
 # Create the QRDataGenerator instance
 batch_size = 32
 epochs = 20
-qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size, max_sequence_length=max_sequence_length, num_chars=num_chars)
+qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size, max_sequence_length=max_sequence_length, num_chars=num_chars, target_size=target_image_size)
 
 # Train the model
 history = model.fit(qr_data_gen, epochs=epochs, steps_per_epoch=len(qr_data_gen), use_multiprocessing=True)
