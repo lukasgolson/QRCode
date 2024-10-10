@@ -201,10 +201,8 @@ class SpatialTransformerInputHead(Layer):
 gpus = tf.config.list_physical_devices('GPU')
 print(f"GPUs: {gpus}")
 
-# Define the strategy for multi-GPU training
 strategy = tf.distribute.MirroredStrategy()
 
-# Print the number of devices being used for training
 print(f"Number of devices: {strategy.num_replicas_in_sync}")
 
 
@@ -252,7 +250,7 @@ def create_model(input_shape, max_sequence_length, num_chars):
     # Instantiate the SpatialTransformerInputHead
     processing_head = SpatialTransformerInputHead()(inputs)  # Ensure the output is used correctly
 
-    # Build the involution architecture (assuming this is defined elsewhere)
+    # Build the involution architecture
     x = create_involution_architecture(processing_head, 2)
     x = layers.BatchNormalization()(x)  # Add Batch Normalization
     x = Dropout(0.25)(x)
@@ -282,7 +280,7 @@ def create_model(input_shape, max_sequence_length, num_chars):
 
 
 # Define model parameters
-max_sequence_length = 512  # Based on dataset
+max_sequence_length = 512
 num_chars = 128  # Unique characters in the data
 target_image_size = 512  # Image pixel size (length and width)
 
@@ -291,13 +289,10 @@ input_shape = (target_image_size, target_image_size, 1)  # Define the input shap
 
 model = create_model(input_shape, max_sequence_length, num_chars)
 
-# Compile the model
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-# Show the model summary
 model.summary()
 
-# Create the QRDataGenerator instance
 batch_size = 24
 epochs = 1
 qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size, max_sequence_length=max_sequence_length,
@@ -306,7 +301,6 @@ qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size, max
 # Train the model
 history = model.fit(qr_data_gen, epochs=epochs, steps_per_epoch=len(qr_data_gen))
 
-# Get current time and date
 date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 # Save the model
