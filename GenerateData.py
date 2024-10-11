@@ -25,8 +25,8 @@ def generate_qr(content, name, error_correction=qrcode.constants.ERROR_CORRECT_L
     os.makedirs('data/images', exist_ok=True)
     os.makedirs('data/contents', exist_ok=True)
 
-    img = apply_random_shift(img, 25)
-    img = apply_random_rotation(img, 45)
+    img = apply_random_shift(img, 30)
+    img = apply_random_rotation(img, 60)
     img = add_random_noise(img)
 
     # Resize image to 512x512
@@ -38,7 +38,7 @@ def generate_qr(content, name, error_correction=qrcode.constants.ERROR_CORRECT_L
         f.write(content)
 
 
-def add_random_noise(image, noise_factor_range=(1, 50)):
+def add_random_noise(image, noise_factor_range=(1, 75)):
     """Add random pixel noise to the image with a randomized noise factor."""
     noise_factor = random.randint(noise_factor_range[0], noise_factor_range[1])
     np_image = np.array(image)

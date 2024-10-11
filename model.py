@@ -6,7 +6,8 @@ import numpy as np
 from PIL import Image
 import tensorflow as tf
 from keras import layers, Layer, Model
-from keras.src.layers import Conv2D, MaxPooling2D, Flatten, LayerNormalization
+from keras.src.layers import Conv2D, MaxPooling2D, Flatten, LayerNormalization, Conv2DTranspose, UpSampling2D
+from tensorflow.keras.callbacks import TensorBoard
 from tensorflow.keras.layers import TextVectorization, Dropout, Dense
 from tensorflow.keras.utils import to_categorical
 
@@ -225,22 +226,27 @@ def positional_encoding(length, depth):
 involution_id = 0
 
 
-def create_involution_architecture(input_tensor, length):
-    head = input_tensor
+def create_involution_architecture(input_tensor, length, channels=16, group_number=1, downscale_factor=2):
+    x = input_tensor
+
 
     for i in range(length):
         global involution_id
         involution_id += 1
 
-        y, _ = Involution(
-            channel=3, group_number=1, kernel_size=3, stride=1, reduction_ratio=2, name=f'involution_{involution_id}'
-        )(head)
+        channels_count = channels * (2 ** i)
 
-        y = keras.layers.Conv2D(3, (1, 1), activation='relu')(y)
+        x = keras.layers.Conv2D(channels_count, (1, 1), activation='relu')(x)
 
-        head = y
+        x, _ = Involution(
+            channel=channels_count, group_number=group_number, kernel_size=3, stride=2, reduction_ratio=2,
+            name=f'involution_{involution_id}'
+        )(x)
 
-    return head
+        x = keras.layers.ReLU()(x)
+        x = keras.layers.MaxPooling2D((2, 2))(x)
+
+    return x
 
 
 def create_model(input_shape, max_sequence_length, num_chars):
@@ -250,29 +256,32 @@ def create_model(input_shape, max_sequence_length, num_chars):
     # Instantiate the SpatialTransformerInputHead
     processing_head = SpatialTransformerInputHead()(inputs)  # Ensure the output is used correctly
 
+    print(processing_head.shape)
+
     # Build the involution architecture
-    x = create_involution_architecture(processing_head, 2)
+
+    x = processing_head
+
+    # upscale by 2
+    x = create_involution_architecture(x, 4, 16, 4)
     x = layers.BatchNormalization()(x)  # Add Batch Normalization
+    x = layers.Dense(512, activation='relu')(x)
+
     x = Dropout(0.25)(x)
-
-
-    # Add positional encoding to the sequence
-    pos_encoding = positional_encoding(max_sequence_length, x.shape[-1])
-    x += pos_encoding
-    x = layers.Dense(256, activation='relu')(x)
-    x = layers.Dense(256, activation='relu')(x)
-    x = layers.Dense(256, activation='relu')(x)
-
 
     # reduce to 512X512X1
     x = layers.Conv2D(1, (1, 1), activation='relu')(x)
 
-
     # Flatten and reshape for sequence prediction
     sequence = layers.Flatten()(x)
-    sequence = layers.Dense(max_sequence_length, activation='relu')(sequence)
+    sequence = layers.Dense(max_sequence_length * num_chars, activation='relu')(sequence)
     sequence = layers.Reshape((max_sequence_length, -1))(sequence)  # Reshape to (sequence_length, feature_size)
 
+    pos_encoding = positional_encoding(max_sequence_length, x.shape[-1])
+    sequence += pos_encoding
+
+    sequence = layers.Dense(512, activation='relu')(sequence)
+    sequence = layers.BatchNormalization()(sequence)
 
     outputs = layers.TimeDistributed(layers.Dense(num_chars, activation='softmax'))(sequence)
 
@@ -286,24 +295,31 @@ target_image_size = 512  # Image pixel size (length and width)
 
 input_shape = (target_image_size, target_image_size, 1)  # Define the input shape for the images
 
-
 model = create_model(input_shape, max_sequence_length, num_chars)
 
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
 model.summary()
 
-batch_size = 24
-epochs = 1
+batch_size = 64 + 16
+epochs = 4
 qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size, max_sequence_length=max_sequence_length,
                               num_chars=num_chars, target_size=(target_image_size, target_image_size))
 
+
+# make the log directory
+os.makedirs("logs/fit/", exist_ok=True)
+log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+tensorboard_callback = TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=True)
+
+
+
 # Train the model
-history = model.fit(qr_data_gen, epochs=epochs, steps_per_epoch=len(qr_data_gen))
+history = model.fit(qr_data_gen, epochs=epochs, steps_per_epoch=len(qr_data_gen), callbacks=[tensorboard_callback])
 
 date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 # Save the model
 save_path = 'models'
 os.makedirs(save_path, exist_ok=True)  # Create the directory if it does not exist
-model.save(os.path.join(save_path, f'qr_model_{date}.h5'))
+model.save(os.path.join(save_path, f'qr_model_{date}.keras'))
