@@ -21,8 +21,8 @@ content_dir = 'data/contents'
 
 # Data generator for images and text content
 class QRDataGenerator(tf.keras.utils.Sequence):
-    def __init__(self, image_dir, content_dir, batch_size=32, target_size=(256, 256), max_sequence_length=512,
-                 num_chars=1000, shuffle=True, **kwargs):
+    def __init__(self, image_dir, content_dir, batch_size=32, target_size=(256, 256),
+                 max_sequence_length=512, num_chars=1000, shuffle=True, **kwargs):
         self.image_dir = image_dir
         self.content_dir = content_dir
         self.batch_size = batch_size
@@ -30,64 +30,92 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         self.max_sequence_length = max_sequence_length
         self.num_chars = num_chars
         self.shuffle = shuffle
-        self.image_files = sorted([f for f in os.listdir(image_dir) if f.endswith('.png')])
-        self.content_files = sorted([f for f in os.listdir(content_dir) if f.endswith('.txt')])
+        self.valid_image_files = self.load_valid_files()  # Load valid image-text pairs
+        self.on_epoch_end()  # Shuffle at the start
 
         # Load contents for fitting the vectorizer
-        self.contents = self.load_contents()  # Preload contents
+        self.contents = self.load_contents()
 
         # Create and adapt the TextVectorization layer
         self.vectorizer = TextVectorization(output_mode='int',
                                             output_sequence_length=self.max_sequence_length,
                                             max_tokens=self.num_chars)
-        self.vectorizer.adapt(self.contents)  # Fit the vectorizer on the contents
+        self.vectorizer.adapt(self.contents)
 
-        # Shuffle indices if needed
-        self.on_epoch_end()
+        self.current_index = 0  # Track the current index
 
         super().__init__(**kwargs)
 
+    def load_valid_files(self):
+        valid_files = []
+        for img_file in os.listdir(self.image_dir):
+            if img_file.endswith('.png'):
+                txt_file = img_file.replace('.png', '.txt')
+                if txt_file in os.listdir(self.content_dir):
+                    valid_files.append(img_file)
+        return sorted(valid_files)
+
     def load_contents(self):
         contents = []
-        for txt_file in self.content_files:
-            with open(os.path.join(self.content_dir, txt_file), 'r') as file:
-                contents.append(file.read().strip())
+        for txt_file in os.listdir(self.content_dir):
+            if txt_file.endswith('.txt'):
+                with open(os.path.join(self.content_dir, txt_file), 'r') as file:
+                    contents.append(file.read().strip())
         return contents
 
     def __len__(self):
-        return int(np.ceil(len(self.image_files) / self.batch_size))
+        return int(np.ceil(len(self.valid_image_files) / self.batch_size))
 
     def __getitem__(self, index):
         # Generate indexes of the batch
-        indexes = self.indexes[index * self.batch_size:(index + 1) * self.batch_size]
-
-        # Find list of image files for this batch
-        batch_x = [self.image_files[k] for k in indexes]
+        batch_x = self.valid_image_files[self.current_index:self.current_index + self.batch_size]
 
         # Generate data
         X, y = self.__data_generation(batch_x)
+
+        # Update the current index for the next batch
+        self.current_index += self.batch_size
+
+        # Check if we've reached the end and need to reshuffle
+        if self.current_index >= len(self.valid_image_files):
+            self.current_index = 0  # Reset the index
+            if self.shuffle:
+                np.random.shuffle(self.valid_image_files)  # Reshuffle the valid files
+
         return X, y
 
     def on_epoch_end(self):
-        # Update indexes after each epoch and shuffle if enabled
-        self.indexes = np.arange(len(self.image_files))
+        # Shuffle the valid files and reset the current index
         if self.shuffle:
-            np.random.shuffle(self.indexes)
+            np.random.shuffle(self.valid_image_files)
+        self.current_index = 0  # Reset the current index at the end of the epoch
 
     def __data_generation(self, batch_x):
-        X = np.empty((len(batch_x), *self.target_size, 1))
-        y = np.empty((len(batch_x), self.max_sequence_length, self.num_chars))
+        X = []
+        y = []
 
-        for i, img_file in enumerate(batch_x):
+        for img_file in batch_x:
             # Load and preprocess image
-            img = Image.open(os.path.join(self.image_dir, img_file)).convert('L')
+            img_path = os.path.join(self.image_dir, img_file)
+            img = Image.open(img_path).convert('L')
             img = img.resize(self.target_size)
-            X[i,] = np.array(img).reshape(self.target_size + (1,)) / 255.0
+            X.append(np.array(img).reshape(self.target_size + (1,)) / 255.0)
 
             # Load and vectorize corresponding text content
-            content = self.load_content(img_file.replace('.png', '.txt'))
-            encoded_content = self.vectorizer([content]).numpy()[0]  # Use the TextVectorization layer to encode
-            y[i,] = to_categorical(encoded_content, num_classes=self.num_chars)  # One-hot encode the output
+            txt_file = img_file.replace('.png', '.txt')
+            content = self.load_content(txt_file)
+            encoded_content = self.vectorizer([content]).numpy()[0]
+            one_hot_encoded = to_categorical(encoded_content, num_classes=self.num_chars)
+            y.append(one_hot_encoded)
+
+        # Convert lists to numpy arrays
+        X = np.array(X)
+        y = np.array(y)
+
+        # Pad arrays if necessary to match batch size
+        if len(y) < self.batch_size:
+            X = np.pad(X, ((0, self.batch_size - len(X)), (0, 0), (0, 0), (0, 0)), mode='constant')
+            y = np.pad(y, ((0, self.batch_size - len(y)), (0, 0), (0, 0)), mode='constant')
 
         return X, y
 
@@ -203,10 +231,6 @@ class SpatialTransformerInputHead(Layer):
 gpus = tf.config.list_physical_devices('GPU')
 print(f"GPUs: {gpus}")
 
-strategy = tf.distribute.MirroredStrategy()
-
-print(f"Number of devices: {strategy.num_replicas_in_sync}")
-
 
 def positional_encoding(length, depth):
     """Generates a positional encoding matrix for a given sequence length and depth (embedding size)."""
@@ -288,33 +312,59 @@ def create_model(input_shape, max_sequence_length, num_chars):
     return Model(inputs, outputs, name='qr_model')
 
 
-if __name__ == "__main__":
-    # Define model parameters
-    max_sequence_length = 512
-    num_chars = 128  # Unique characters in the data
-    target_image_size = 512  # Image pixel size (length and width)
+checkpoint_dir = "./ckpt"
+if not os.path.exists(checkpoint_dir):
+    os.makedirs(checkpoint_dir)
 
+
+def get_compiled_model(max_sequence_length=512, num_chars=128, target_image_size=512):
     input_shape = (target_image_size, target_image_size, 1)  # Define the input shape for the images
 
     model = create_model(input_shape, max_sequence_length, num_chars)
-
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    return model
 
-    model.summary()
 
-    batch_size = 64 + 16
-    epochs = 2
+def make_or_restore_model(max_sequence_length=512, num_chars=128, target_image_size=512):
+    # Either restore the latest model, or create a fresh one
+    # if there is no checkpoint available.
+    checkpoints = [checkpoint_dir + "/" + name for name in os.listdir(checkpoint_dir)]
+    if checkpoints:
+        latest_checkpoint = max(checkpoints, key=os.path.getctime)
+        print("Restoring from", latest_checkpoint)
+        return keras.models.load_model(latest_checkpoint)
+    print("Creating a new model")
+    return get_compiled_model(max_sequence_length, num_chars, target_image_size)
+
+
+def run_training(epochs=1, batch_size=16):
+    max_sequence_length = 512
+    num_chars = 128
+    target_image_size = 512
+
+    strategy = tf.distribute.MirroredStrategy()
+
+    with strategy.scope():
+        model = make_or_restore_model(max_sequence_length, num_chars, target_image_size)
+        model.summary()
+
+    os.makedirs("logs/fit/", exist_ok=True)
+    log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    callbacks = [
+
+        TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=True),
+        keras.callbacks.ModelCheckpoint(
+            filepath=checkpoint_dir + "/ckpt-{epoch}", save_freq="epoch"
+        )
+
+    ]
+
     qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size,
                                   max_sequence_length=max_sequence_length,
                                   num_chars=num_chars, target_size=(target_image_size, target_image_size))
 
-    # make the log directory
-    os.makedirs("logs/fit/", exist_ok=True)
-    log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    tensorboard_callback = TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=True)
-
-    # Train the model
-    history = model.fit(qr_data_gen, epochs=epochs, steps_per_epoch=len(qr_data_gen), callbacks=[tensorboard_callback])
+    model.fit(qr_data_gen, epochs=epochs, steps_per_epoch=len(qr_data_gen), callbacks=callbacks)
 
     date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
@@ -323,6 +373,16 @@ if __name__ == "__main__":
     os.makedirs(save_path, exist_ok=True)  # Create the directory if it does not exist
     model.save(os.path.join(save_path, f'qr_model_{date}.keras'))
 
-    pickle.dump({'config': qr_data_gen.vectorizer.get_config(),
-                 'weights': qr_data_gen.vectorizer.get_weights()}
-                , open(os.path.join(save_path, f'vectorizer_{date}.keras', "wb")))
+    vectorizer_config = qr_data_gen.vectorizer.get_config()
+    vectorizer_weights = qr_data_gen.vectorizer.get_weights()
+
+    with open(os.path.join(save_path, f'vectorizer_{date}.keras'), "wb") as f:
+        pickle.dump({'config': vectorizer_config, 'weights': vectorizer_weights}, f)
+
+
+if __name__ == "__main__":
+    run_training(epochs=16, batch_size=16)
+
+
+
+
