@@ -302,7 +302,7 @@ model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accur
 model.summary()
 
 batch_size = 64 + 16
-epochs = 4
+epochs = 2
 qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size, max_sequence_length=max_sequence_length,
                               num_chars=num_chars, target_size=(target_image_size, target_image_size))
 
