@@ -3,9 +3,9 @@ import tensorflow as tf
 
 class Involution(keras.layers.Layer):
     def __init__(
-            self, channel, group_number, kernel_size, stride, reduction_ratio, name
+            self, channel, group_number, kernel_size, stride, reduction_ratio, name, **kwargs
     ):
-        super().__init__(name=name)
+        super().__init__(name=name, **kwargs)
 
         # Initialize the parameters.
         self.channel = channel

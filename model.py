@@ -1,5 +1,6 @@
 import datetime
 import os
+import pickle
 
 import keras
 import numpy as np
@@ -229,7 +230,6 @@ involution_id = 0
 def create_involution_architecture(input_tensor, length, channels=16, group_number=1, downscale_factor=2):
     x = input_tensor
 
-
     for i in range(length):
         global involution_id
         involution_id += 1
@@ -288,38 +288,41 @@ def create_model(input_shape, max_sequence_length, num_chars):
     return Model(inputs, outputs, name='qr_model')
 
 
-# Define model parameters
-max_sequence_length = 512
-num_chars = 128  # Unique characters in the data
-target_image_size = 512  # Image pixel size (length and width)
+if __name__ == "__main__":
+    # Define model parameters
+    max_sequence_length = 512
+    num_chars = 128  # Unique characters in the data
+    target_image_size = 512  # Image pixel size (length and width)
 
-input_shape = (target_image_size, target_image_size, 1)  # Define the input shape for the images
+    input_shape = (target_image_size, target_image_size, 1)  # Define the input shape for the images
 
-model = create_model(input_shape, max_sequence_length, num_chars)
+    model = create_model(input_shape, max_sequence_length, num_chars)
 
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-model.summary()
+    model.summary()
 
-batch_size = 64 + 16
-epochs = 2
-qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size, max_sequence_length=max_sequence_length,
-                              num_chars=num_chars, target_size=(target_image_size, target_image_size))
+    batch_size = 64 + 16
+    epochs = 2
+    qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size,
+                                  max_sequence_length=max_sequence_length,
+                                  num_chars=num_chars, target_size=(target_image_size, target_image_size))
 
+    # make the log directory
+    os.makedirs("logs/fit/", exist_ok=True)
+    log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    tensorboard_callback = TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=True)
 
-# make the log directory
-os.makedirs("logs/fit/", exist_ok=True)
-log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-tensorboard_callback = TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=True)
+    # Train the model
+    history = model.fit(qr_data_gen, epochs=epochs, steps_per_epoch=len(qr_data_gen), callbacks=[tensorboard_callback])
 
+    date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
+    # Save the model
+    save_path = 'models'
+    os.makedirs(save_path, exist_ok=True)  # Create the directory if it does not exist
+    model.save(os.path.join(save_path, f'qr_model_{date}.keras'))
 
-# Train the model
-history = model.fit(qr_data_gen, epochs=epochs, steps_per_epoch=len(qr_data_gen), callbacks=[tensorboard_callback])
-
-date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-# Save the model
-save_path = 'models'
-os.makedirs(save_path, exist_ok=True)  # Create the directory if it does not exist
-model.save(os.path.join(save_path, f'qr_model_{date}.keras'))
+    pickle.dump({'config': qr_data_gen.vectorizer.get_config(),
+                 'weights': qr_data_gen.vectorizer.get_weights()}
+                , open(os.path.join(save_path, f'vectorizer_{date}.keras', "wb")))
