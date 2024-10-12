@@ -18,6 +18,9 @@ from layers.involution import Involution
 image_dir = 'data/images'
 content_dir = 'data/contents'
 
+checkpoint_dir = "./ckpt"
+if not os.path.exists(checkpoint_dir):
+    os.makedirs(checkpoint_dir)
 
 # Data generator for images and text content
 class QRDataGenerator(tf.keras.utils.Sequence):
@@ -312,9 +315,7 @@ def create_model(input_shape, max_sequence_length, num_chars):
     return Model(inputs, outputs, name='qr_model')
 
 
-checkpoint_dir = "./ckpt"
-if not os.path.exists(checkpoint_dir):
-    os.makedirs(checkpoint_dir)
+
 
 
 def get_compiled_model(max_sequence_length=512, num_chars=128, target_image_size=512):
@@ -328,6 +329,9 @@ def get_compiled_model(max_sequence_length=512, num_chars=128, target_image_size
 def make_or_restore_model(max_sequence_length=512, num_chars=128, target_image_size=512):
     # Either restore the latest model, or create a fresh one
     # if there is no checkpoint available.
+
+
+
     checkpoints = [checkpoint_dir + "/" + name for name in os.listdir(checkpoint_dir)]
     if checkpoints:
         latest_checkpoint = max(checkpoints, key=os.path.getctime)
@@ -355,7 +359,7 @@ def run_training(epochs=1, batch_size=16):
 
         TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=True),
         keras.callbacks.ModelCheckpoint(
-            filepath=checkpoint_dir + "/ckpt-{epoch}", save_freq="epoch"
+            filepath=checkpoint_dir + "/ckpt-{epoch}.keras", save_freq="epoch"
         )
 
     ]
@@ -376,7 +380,7 @@ def run_training(epochs=1, batch_size=16):
     vectorizer_config = qr_data_gen.vectorizer.get_config()
     vectorizer_weights = qr_data_gen.vectorizer.get_weights()
 
-    with open(os.path.join(save_path, f'vectorizer_{date}.keras'), "wb") as f:
+    with open(os.path.join(save_path, f'vectorizer_{date}.pckl'), "wb") as f:
         pickle.dump({'config': vectorizer_config, 'weights': vectorizer_weights}, f)
 
 
