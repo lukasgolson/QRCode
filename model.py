@@ -22,6 +22,11 @@ checkpoint_dir = "./ckpt"
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
 
+
+def char_split(input_string):
+    return tf.strings.unicode_split(input_string, 'UTF-8')
+
+
 # Data generator for images and text content
 class QRDataGenerator(tf.keras.utils.Sequence):
     def __init__(self, image_dir, content_dir, batch_size=32, target_size=(256, 256),
@@ -40,9 +45,11 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         self.contents = self.load_contents()
 
         # Create and adapt the TextVectorization layer
-        self.vectorizer = TextVectorization(output_mode='int',
-                                            output_sequence_length=self.max_sequence_length,
-                                            max_tokens=self.num_chars)
+        self.vectorizer = TextVectorization(
+            split=char_split,
+            output_mode='int',
+            output_sequence_length=self.max_sequence_length,
+            max_tokens=self.num_chars)
         self.vectorizer.adapt(self.contents)
 
         self.current_index = 0  # Track the current index
@@ -315,9 +322,6 @@ def create_model(input_shape, max_sequence_length, num_chars):
     return Model(inputs, outputs, name='qr_model')
 
 
-
-
-
 def get_compiled_model(max_sequence_length=512, num_chars=128, target_image_size=512):
     input_shape = (target_image_size, target_image_size, 1)  # Define the input shape for the images
 
@@ -329,8 +333,6 @@ def get_compiled_model(max_sequence_length=512, num_chars=128, target_image_size
 def make_or_restore_model(max_sequence_length=512, num_chars=128, target_image_size=512):
     # Either restore the latest model, or create a fresh one
     # if there is no checkpoint available.
-
-
 
     checkpoints = [checkpoint_dir + "/" + name for name in os.listdir(checkpoint_dir)]
     if checkpoints:
@@ -347,6 +349,8 @@ def run_training(epochs=1, batch_size=16):
     target_image_size = 512
 
     strategy = tf.distribute.MirroredStrategy()
+
+    tf.keras.backend.clear_session()
 
     with strategy.scope():
         model = make_or_restore_model(max_sequence_length, num_chars, target_image_size)
@@ -385,8 +389,4 @@ def run_training(epochs=1, batch_size=16):
 
 
 if __name__ == "__main__":
-    run_training(epochs=16, batch_size=16)
-
-
-
-
+    run_training(epochs=16, batch_size=8)
