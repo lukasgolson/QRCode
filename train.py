@@ -4,6 +4,7 @@ import os
 import keras
 import numpy as np
 import tensorflow as tf
+from PIL import Image
 from keras import layers, Model
 from tensorflow.keras.callbacks import TensorBoard
 from tensorflow.keras.layers import Dropout
@@ -126,6 +127,12 @@ def make_or_restore_model(max_sequence_length=512, num_chars=128, target_image_s
     print("Creating a new model")
     return get_compiled_model(max_sequence_length, num_chars, target_image_size)
 
+from char_level_encoder import CharLevelEncoder
+
+
+
+
+
 
 def run_training(epochs=1, batch_size=16):
     max_sequence_length = 512
@@ -156,7 +163,10 @@ def run_training(epochs=1, batch_size=16):
                                   max_sequence_length=max_sequence_length, num_chars=num_chars,
                                   target_size=(target_image_size, target_image_size))
 
-    model.fit(qr_data_gen, epochs=epochs, steps_per_epoch=len(qr_data_gen), callbacks=callbacks)
+
+
+
+    model.fit(qr_data_gen, epochs=epochs, callbacks=callbacks)
 
     date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
@@ -167,4 +177,4 @@ def run_training(epochs=1, batch_size=16):
 
 
 if __name__ == "__main__":
-    run_training(epochs=16, batch_size=8)
+    run_training(epochs=16, batch_size=16)

@@ -78,7 +78,7 @@ def generate_data(population=None, max_length=300):
     return content
 
 
-def generate_qr_code(i):
+def generate_qr_code(i, repeats=3):
     """Generate a QR code and return its index for reference."""
     if i % 4 == 0:
         max_length = random.randint(1, 25)
@@ -99,16 +99,19 @@ def generate_qr_code(i):
     # Generate a clean and a noisy QR code
 
     generate_qr(content, f'QR{i}_clean', noise_factor_range=(0, 0), max_shift=0, max_rotation=0)
-    generate_qr(content, f'QR{i}_dirty')
+
+    for j in range(repeats):
+
+        generate_qr(content, f'QR{i}_dirty_{j}')
     return i
 
 
 if __name__ == '__main__':
-    count = 5
+    count = 64 // 4
     random.seed("Lukas G. Olson")
 
     # Using ThreadPoolExecutor for parallel processing
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-        futures = [executor.submit(generate_qr_code, i) for i in range(count)]
+        futures = [executor.submit(generate_qr_code, i, 3) for i in range(count)]
         for future in tqdm.tqdm(as_completed(futures), total=count, desc="Generating QR codes"):
             future.result()  # This will raise any exceptions that occurred during execution

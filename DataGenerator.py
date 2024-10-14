@@ -3,7 +3,9 @@ import numpy as np
 import tensorflow as tf
 from PIL import Image
 from keras.src.utils import to_categorical
+
 from char_level_encoder import CharLevelEncoder
+
 
 class QRDataGenerator(tf.keras.utils.Sequence):
     def __init__(self, image_dir, content_dir, batch_size=32, num_chars=128, target_size=(256, 256),
@@ -33,6 +35,8 @@ class QRDataGenerator(tf.keras.utils.Sequence):
                 txt_file = img_file.replace('.png', '.txt')
                 if txt_file in os.listdir(self.content_dir):
                     valid_files.append(img_file)
+
+        print(f"Found {len(valid_files)} valid files.")
         return sorted(valid_files)
 
     def load_contents(self):
@@ -44,31 +48,39 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         return contents
 
     def __len__(self):
-        return int(np.ceil(len(self.valid_image_files) / self.batch_size))
+        return int(np.floor(len(self.valid_image_files) / self.batch_size)) - 1
+
+
 
     def __getitem__(self, index):
         # Calculate the start and end index for the batch
-        start_index = index * self.batch_size
-        end_index = (index + 1) * self.batch_size
+        start_index = (index * self.batch_size) % len(self.valid_image_files)
+        end_index = start_index + self.batch_size
 
-        # Check if we've reached the end of the valid files
+        # Adjust the end index if it exceeds the number of valid files
         if end_index > len(self.valid_image_files):
-            # Reshuffle the data if at the end of the dataset
-            if self.shuffle:
-                np.random.shuffle(self.valid_image_files)  # Reshuffle the data
-            start_index = 0
-            end_index = self.batch_size  # Reset to the first batch
+            end_index = len(self.valid_image_files)
+
+        # Get the current batch of valid files
+        batch_x = self.valid_image_files[start_index:end_index]
+
+        # If batch_x is less than batch_size, fill it from the beginning
+        if len(batch_x) < self.batch_size:
+            batch_x += self.valid_image_files[:self.batch_size - len(batch_x)]
 
         # Generate data for the current batch
-        batch_x = self.valid_image_files[start_index:end_index]
         X, y = self.__data_generation(batch_x)
 
         return X, y
+
     def on_epoch_end(self):
+        print("Epoch end reached. Reshuffling the data.")
         # Shuffle the valid files at the end of each epoch if required
         if self.shuffle:
             np.random.shuffle(self.valid_image_files)
         self.current_index = 0  # Reset the current index
+
+
 
     def __data_generation(self, batch_x):
         X = []
@@ -92,6 +104,8 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         y = y.reshape(X.shape[0], self.max_sequence_length, self.num_chars)
 
         return X, y
+
+
 
     def load_content(self, filename):
         with open(os.path.join(self.content_dir, filename), 'r') as file:
