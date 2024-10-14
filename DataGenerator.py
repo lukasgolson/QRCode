@@ -29,15 +29,14 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         super().__init__(**kwargs)
 
     def load_valid_files(self):
-        valid_files = []
-        image_files = os.listdir(self.image_dir)
+        # Create a set of valid text file names for quick lookup
+        content_files = set(os.listdir(self.content_dir))
 
-        # Use tqdm to add a progress bar to file loading
-        for img_file in tqdm(image_files, desc="Finding valid QR pairs"):
-            if img_file.endswith('.png'):
-                txt_file = img_file.replace('.png', '.txt')
-                if txt_file in os.listdir(self.content_dir):
-                    valid_files.append(img_file)
+        # Use a list comprehension to collect valid image files
+        valid_files = [
+            img_file for img_file in tqdm(os.listdir(self.image_dir), desc="Finding valid QR pairs")
+            if img_file.endswith('.png') and img_file.replace('.png', '.txt') in content_files
+        ]
 
         print(f"Found {len(valid_files)} valid files.")
         return sorted(valid_files)
