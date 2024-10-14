@@ -9,6 +9,7 @@ class Involution(keras.layers.Layer):
     def __init__(
             self, channel, group_number, kernel_size, stride, reduction_ratio, name=None, **kwargs
     ):
+
         global involution_id
         involution_id += 1
         if name is None:
@@ -22,6 +23,13 @@ class Involution(keras.layers.Layer):
         self.kernel_size = kernel_size
         self.stride = stride
         self.reduction_ratio = reduction_ratio
+
+
+        self.output_reshape = None
+        self.input_patches_reshape = None
+        self.kernel_reshape = None
+        self.kernel_gen = None
+        self.stride_layer = None
 
     def build(self, input_shape):
         # Get the shape of the input.

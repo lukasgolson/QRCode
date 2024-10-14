@@ -9,41 +9,41 @@ import tensorflow as tf
 @keras.saving.register_keras_serializable(package="qr_model", name="SpatialTransformerInputHead")
 class SpatialTransformerInputHead(keras.layers.Layer):
     def __init__(self, **kwargs):
-        super(SpatialTransformerInputHead, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
-        # Localization head layers
-        self.conv1 = Conv2D(14, (5, 5), padding='valid', activation='relu')
-        self.pool1 = MaxPooling2D((2, 2), strides=2)
-        self.conv2 = Conv2D(32, (5, 5), padding='valid', activation='relu')
-        self.pool2 = MaxPooling2D((2, 2), strides=2)
-        self.flatten = Flatten()
-        self.dense1 = Dense(120, activation='relu')
-        self.dropout = Dropout(0.2)
-        self.dense2 = Dense(84, activation='relu')
+        self.transformation_model = None
 
+        self.output_layer = None
+
+    def build(self, input_shape):
         bias_initializer = Constant([1, 0, 0, 0, 1, 0])
-        self.internal_output_layer = Dense(6, activation='linear', kernel_initializer='zeros', bias_initializer=bias_initializer)
+
+        self.transformation_model = keras.Sequential([
+            keras.layers.Conv2D(14, (5, 5), padding='valid', activation='relu', name="test"),
+            keras.layers.MaxPooling2D((2, 2), strides=2),
+            keras.layers.Conv2D(32, (5, 5), padding='valid', activation='relu'),
+            keras.layers.MaxPooling2D((2, 2), strides=2),
+            keras.layers.Flatten(),
+            keras.layers.Dense(120, activation='relu'),
+            keras.layers.Dropout(0.2),
+            keras.layers.Dense(84, activation='relu'),
+            Dense(6, activation='linear', kernel_initializer='zeros',
+                  bias_initializer=bias_initializer)
+
+        ]
+        )
+
+        self.transformation_model.build(input_shape)
 
         self.output_layer = Conv2D(1, (1, 1), activation='sigmoid')  # Adjust as necessary for your output
 
-    def build(self, input_shape):
-        # Relying on Keras' automatic shape inference
-        super(SpatialTransformerInputHead, self).build(input_shape)
+        self.output_layer.build(input_shape)
 
     def compute_output_shape(self, input_shape):
         return self.output_layer.compute_output_shape(input_shape)
 
     def call(self, inputs):
-        # Compute transformations using localization head
-        x = self.conv1(inputs)
-        x = self.pool1(x)
-        x = self.conv2(x)
-        x = self.pool2(x)
-        x = self.flatten(x)
-        x = self.dense1(x)
-        x = self.dropout(x)
-        x = self.dense2(x)
-        transformations = self.internal_output_layer(x)
+        transformations = self.transformation_model(inputs)
 
         # Apply spatial transformation
         grids = self.generate_normalized_homo_meshgrids(inputs)
@@ -58,32 +58,12 @@ class SpatialTransformerInputHead(keras.layers.Layer):
     def get_config(self):
         base_config = super(SpatialTransformerInputHead, self).get_config()
         config = {
-            "conv1": keras.layers.serialize(self.conv1),
-            "pool1": keras.layers.serialize(self.pool1),
-            "conv2": keras.layers.serialize(self.conv2),
-            "pool2": keras.layers.serialize(self.pool2),
-            "flatten": keras.layers.serialize(self.flatten),
-            "dense1": keras.layers.serialize(self.dense1),
-            "dropout": keras.layers.serialize(self.dropout),
-            "dense2": keras.layers.serialize(self.dense2),
-            "internal_output_layer": keras.layers.serialize(self.internal_output_layer),
-            "output_layer": keras.layers.serialize(self.output_layer)
+
         }
         return {**base_config, **config}
 
     @classmethod
     def from_config(cls, config):
-        config['conv1'] = keras.layers.deserialize(config['conv1'])
-        config['pool1'] = keras.layers.deserialize(config['pool1'])
-        config['conv2'] = keras.layers.deserialize(config['conv2'])
-        config['pool2'] = keras.layers.deserialize(config['pool2'])
-        config['flatten'] = keras.layers.deserialize(config['flatten'])
-        config['dense1'] = keras.layers.deserialize(config['dense1'])
-        config['dropout'] = keras.layers.deserialize(config['dropout'])
-        config['dense2'] = keras.layers.deserialize(config['dense2'])
-        config['internal_output_layer'] = keras.layers.deserialize(config['internal_output_layer'])
-        config['output_layer'] = keras.layers.deserialize(config['output_layer'])
-
         return cls(**config)
 
     def generate_normalized_homo_meshgrids(self, inputs):
