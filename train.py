@@ -135,6 +135,7 @@ class QRDataGenerator(tf.keras.utils.Sequence):
 
 # Spatial Transformer Layer
 
+@keras.saving.register_keras_serializable()
 class SpatialTransformerInputHead(Layer):
     def __init__(self, **kwargs):
         super(SpatialTransformerInputHead, self).__init__(**kwargs)
