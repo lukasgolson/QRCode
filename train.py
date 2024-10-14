@@ -1,4 +1,5 @@
 import datetime
+import math
 import os
 
 import keras
@@ -20,7 +21,6 @@ content_dir = 'data/contents'
 checkpoint_dir = "./ckpt"
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
-
 
 # Data generator for images and text content
 
@@ -52,8 +52,6 @@ def positional_encoding(length, depth):
 def create_involution_architecture(input_tensor, length, channels=16, group_number=1):
     x = input_tensor
 
-
-
     for i in range(length):
         print(f"Involution layer {i}")
         channels_count = channels * (2 ** i)
@@ -63,10 +61,55 @@ def create_involution_architecture(input_tensor, length, channels=16, group_numb
         x, _ = Involution(
             channel=channels_count, group_number=group_number, kernel_size=3, stride=2, reduction_ratio=2)(x)
 
+        x = layers.BatchNormalization()(x)
+
         x = keras.layers.ReLU()(x)
+
         x = keras.layers.MaxPooling2D((2, 2))(x)
 
     return x
+
+
+def calculate_x_y_z(total_elements):
+    for z in range(1, total_elements + 1):
+        if total_elements % z == 0:  # Check if z divides total_elements
+            x_squared = total_elements // z
+            x = int(math.sqrt(x_squared))
+            if x * x == x_squared:  # Check if x is a whole number
+                return x, x, z
+    return None
+
+
+def create_adaptor_architecture(input_tensor, max_sequence_length=512, num_chars=128):
+    x = input_tensor
+
+    x = layers.BatchNormalization()(x)
+
+    x = layers.Flatten()(x)
+    x = layers.Dense(max_sequence_length, activation='relu')(x)
+    x = layers.Reshape((max_sequence_length, -1))(x)
+
+    pos_encoding = positional_encoding(max_sequence_length, x.shape[-1])
+    x += pos_encoding
+
+    x = layers.Dense(num_chars, activation='relu')(x)
+
+    x = layers.BatchNormalization()(x)
+
+    print(x.shape)
+
+    return x
+
+def create_dense_architecture(input_tensor, units = 128, depth = 4):
+    x = input_tensor
+
+    for i in range(depth):
+        x = layers.Dense(units, activation='relu')(x)
+        x = Dropout(0.2)(x)
+        x = layers.BatchNormalization()(x)
+
+    return x
+
 
 
 def create_model(input_shape, max_sequence_length, num_chars):
@@ -76,33 +119,17 @@ def create_model(input_shape, max_sequence_length, num_chars):
     # Instantiate the SpatialTransformerInputHead
     processing_head = SpatialTransformerInputHead()(inputs)  # Ensure the output is used correctly
 
-    print(processing_head.shape)
-
     # Build the involution architecture
 
     x = processing_head
 
     x = create_involution_architecture(x, 4, 16, 4)
-    x = layers.BatchNormalization()(x)  # Add Batch Normalization
-    x = layers.Dense(512, activation='relu')(x)
 
-    x = Dropout(0.25)(x)
+    x = create_adaptor_architecture(x, max_sequence_length)
 
-    # reduce to 512X512X1
-    x = layers.Conv2D(1, (1, 1), activation='relu')(x)
+    print(x.shape)
 
-    # Flatten and reshape for sequence prediction
-    sequence = layers.Flatten()(x)
-    sequence = layers.Dense(max_sequence_length * num_chars, activation='relu')(sequence)
-    sequence = layers.Reshape((max_sequence_length, -1))(sequence)  # Reshape to (sequence_length, feature_size)
-
-    pos_encoding = positional_encoding(max_sequence_length, x.shape[-1])
-    sequence += pos_encoding
-
-    sequence = layers.Dense(512, activation='relu')(sequence)
-    sequence = layers.BatchNormalization()(sequence)
-
-    outputs = layers.TimeDistributed(layers.Dense(num_chars, activation='softmax'))(sequence)
+    outputs = layers.TimeDistributed(layers.Dense(num_chars, activation='softmax'))(x)
 
     return Model(inputs, outputs, name='qr_model')
 
@@ -127,11 +154,8 @@ def make_or_restore_model(max_sequence_length=512, num_chars=128, target_image_s
     print("Creating a new model")
     return get_compiled_model(max_sequence_length, num_chars, target_image_size)
 
+
 from char_level_encoder import CharLevelEncoder
-
-
-
-
 
 
 def run_training(epochs=1, batch_size=16):
@@ -163,8 +187,7 @@ def run_training(epochs=1, batch_size=16):
                                   max_sequence_length=max_sequence_length, num_chars=num_chars,
                                   target_size=(target_image_size, target_image_size))
 
-
-
+    print("Created data generator")
 
     model.fit(qr_data_gen, epochs=epochs, callbacks=callbacks)
 
@@ -177,4 +200,5 @@ def run_training(epochs=1, batch_size=16):
 
 
 if __name__ == "__main__":
-    run_training(epochs=16, batch_size=16)
+    run_training(epochs=9, batch_size=16)
+    print("Training complete.")

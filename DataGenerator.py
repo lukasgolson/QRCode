@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 from PIL import Image
 from keras.src.utils import to_categorical
+from tqdm import tqdm
 
 from char_level_encoder import CharLevelEncoder
 
@@ -18,7 +19,6 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         self.max_sequence_length = max_sequence_length
         self.shuffle = shuffle
         self.valid_image_files = self.load_valid_files()
-        self.contents = self.load_contents()
         self.encoder = CharLevelEncoder(max_sequence_length=self.max_sequence_length)
         self.current_index = 0
 
@@ -30,7 +30,10 @@ class QRDataGenerator(tf.keras.utils.Sequence):
 
     def load_valid_files(self):
         valid_files = []
-        for img_file in os.listdir(self.image_dir):
+        image_files = os.listdir(self.image_dir)
+
+        # Use tqdm to add a progress bar to file loading
+        for img_file in tqdm(image_files, desc="Finding valid QR pairs"):
             if img_file.endswith('.png'):
                 txt_file = img_file.replace('.png', '.txt')
                 if txt_file in os.listdir(self.content_dir):
@@ -39,13 +42,7 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         print(f"Found {len(valid_files)} valid files.")
         return sorted(valid_files)
 
-    def load_contents(self):
-        contents = []
-        for txt_file in os.listdir(self.content_dir):
-            if txt_file.endswith('.txt'):
-                with open(os.path.join(self.content_dir, txt_file), 'r') as file:
-                    contents.append(file.read().strip())
-        return contents
+
 
     def __len__(self):
         return int(np.floor(len(self.valid_image_files) / self.batch_size)) - 1
@@ -74,7 +71,6 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         return X, y
 
     def on_epoch_end(self):
-        print("Epoch end reached. Reshuffling the data.")
         # Shuffle the valid files at the end of each epoch if required
         if self.shuffle:
             np.random.shuffle(self.valid_image_files)
