@@ -11,7 +11,7 @@ import glob
 from datetime import datetime
 
 from layers.involution import Involution
-from model import SpatialTransformerInputHead
+from train import SpatialTransformerInputHead
 
 
 # Function to load the latest model from the model directory
@@ -28,6 +28,8 @@ def load_latest_model(model_dir):
     return load_model(latest_model_file, custom_objects={'SpatialTransformerInputHead': SpatialTransformerInputHead,
                                                          'Involution': Involution})
 
+def char_split(input_string):
+    return tf.strings.unicode_split(input_string, 'UTF-8')
 
 def load_latest_vectorizer(vectorizer_dir):
     vectorizer_files = glob.glob(os.path.join(vectorizer_dir, '*.pkl'))
@@ -38,11 +40,23 @@ def load_latest_vectorizer(vectorizer_dir):
     latest_vectorizer_file = max(vectorizer_files, key=os.path.getmtime)
     print(f"Loading latest vectorizer: {latest_vectorizer_file}")
 
-    from_disk = pickle.load(open(latest_vectorizer_file, "rb"))
-    new_v = TextVectorization.from_config(from_disk['config'])
-    # You have to call `adapt` with some dummy data (BUG in Keras)
-    new_v.adapt(tf.data.Dataset.from_tensor_slices(["xyz"]))
-    new_v.set_weights(from_disk['weights'])
+    pickle_file = pickle.load(open(latest_vectorizer_file, "rb"))
+
+    config = pickle_file['config'].copy()
+    config['split'] = None  # or set to an empty string if needed
+
+    new_v = TextVectorization.from_config(config)
+
+
+    new_v.split = char_split
+
+
+
+    print(pickle_file['weights'])
+
+    new_v.set_weights(pickle_file['weights'])
+
+
 
     return new_v
 
@@ -59,7 +73,8 @@ def preprocess_image(image_path, target_size):
 def decode_prediction(prediction, vectorizer):
     # Get the character index predictions (argmax across one-hot encoded characters)
     char_indices = np.argmax(prediction, axis=-1)[0]
-    # Use the inverse lookup to map indices to characters
+
+
     decoded_text = ''.join([vectorizer.get_vocabulary()[i] for i in char_indices if i != 0])
     return decoded_text
 
@@ -71,6 +86,7 @@ def run_inference(image_path, model, vectorizer, target_size):
 
     # Run the image through the model
     prediction = model.predict(image)
+
 
     # Decode the prediction to text
     decoded_text = decode_prediction(prediction, vectorizer)

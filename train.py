@@ -12,6 +12,7 @@ from tensorflow.keras.callbacks import TensorBoard
 from tensorflow.keras.layers import TextVectorization, Dropout, Dense
 from tensorflow.keras.utils import to_categorical
 
+from char_level_encoder import CharLevelEncoder
 from layers.involution import Involution
 
 # Paths to directories
@@ -29,14 +30,14 @@ def char_split(input_string):
 
 # Data generator for images and text content
 class QRDataGenerator(tf.keras.utils.Sequence):
-    def __init__(self, image_dir, content_dir, batch_size=32, target_size=(256, 256),
-                 max_sequence_length=512, num_chars=1000, shuffle=True, **kwargs):
+    def __init__(self, image_dir, content_dir, batch_size=32, num_chars=128, target_size=(256, 256),
+                 max_sequence_length=512, shuffle=True, **kwargs):
         self.image_dir = image_dir
         self.content_dir = content_dir
         self.batch_size = batch_size
+        self.num_chars = num_chars
         self.target_size = target_size
         self.max_sequence_length = max_sequence_length
-        self.num_chars = num_chars
         self.shuffle = shuffle
         self.valid_image_files = self.load_valid_files()  # Load valid image-text pairs
         self.on_epoch_end()  # Shuffle at the start
@@ -45,12 +46,7 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         self.contents = self.load_contents()
 
         # Create and adapt the TextVectorization layer
-        self.vectorizer = TextVectorization(
-            split=char_split,
-            output_mode='int',
-            output_sequence_length=self.max_sequence_length,
-            max_tokens=self.num_chars)
-        self.vectorizer.adapt(self.contents)
+        self.encoder = CharLevelEncoder(max_sequence_length=self.max_sequence_length)
 
         self.current_index = 0  # Track the current index
 
@@ -114,7 +110,7 @@ class QRDataGenerator(tf.keras.utils.Sequence):
             # Load and vectorize corresponding text content
             txt_file = img_file.replace('.png', '.txt')
             content = self.load_content(txt_file)
-            encoded_content = self.vectorizer([content]).numpy()[0]
+            encoded_content = self.encoder.encode_as_integers([content])
             one_hot_encoded = to_categorical(encoded_content, num_classes=self.num_chars)
             y.append(one_hot_encoded)
 
@@ -122,10 +118,13 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         X = np.array(X)
         y = np.array(y)
 
-        # Pad arrays if necessary to match batch size
-        if len(y) < self.batch_size:
-            X = np.pad(X, ((0, self.batch_size - len(X)), (0, 0), (0, 0), (0, 0)), mode='constant')
-            y = np.pad(y, ((0, self.batch_size - len(y)), (0, 0), (0, 0)), mode='constant')
+
+        y = y.reshape(X.shape[0], 512, 128)  # Adjust based on your specific needs
+
+
+
+        #print("Shape of X:", X.shape)  # Should be (batch_size, height, width, channels)
+        #print("Shape of y:", y.shape)   # Should be (batch_size, max_sequence_length, num_chars)
 
         return X, y
 
@@ -369,8 +368,8 @@ def run_training(epochs=1, batch_size=16):
     ]
 
     qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size,
-                                  max_sequence_length=max_sequence_length,
-                                  num_chars=num_chars, target_size=(target_image_size, target_image_size))
+                                  max_sequence_length=max_sequence_length, num_chars=num_chars,
+                                  target_size=(target_image_size, target_image_size))
 
     model.fit(qr_data_gen, epochs=epochs, steps_per_epoch=len(qr_data_gen), callbacks=callbacks)
 
@@ -380,12 +379,6 @@ def run_training(epochs=1, batch_size=16):
     save_path = 'models'
     os.makedirs(save_path, exist_ok=True)  # Create the directory if it does not exist
     model.save(os.path.join(save_path, f'qr_model_{date}.keras'))
-
-    vectorizer_config = qr_data_gen.vectorizer.get_config()
-    vectorizer_weights = qr_data_gen.vectorizer.get_weights()
-
-    with open(os.path.join(save_path, f'vectorizer_{date}.pckl'), "wb") as f:
-        pickle.dump({'config': vectorizer_config, 'weights': vectorizer_weights}, f)
 
 
 if __name__ == "__main__":

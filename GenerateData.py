@@ -8,7 +8,7 @@ from PIL import Image
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-def generate_qr(content, name, error_correction=qrcode.constants.ERROR_CORRECT_L, resolution=512):
+def generate_qr(content, name, error_correction=qrcode.constants.ERROR_CORRECT_L, resolution=512, max_shift=30, max_rotation=60, noise_factor_range=(1, 75)):
     qr = qrcode.QRCode(
         version=None,
         error_correction=error_correction,
@@ -25,9 +25,11 @@ def generate_qr(content, name, error_correction=qrcode.constants.ERROR_CORRECT_L
     os.makedirs('data/images', exist_ok=True)
     os.makedirs('data/contents', exist_ok=True)
 
-    img = apply_random_shift(img, 30)
-    img = apply_random_rotation(img, 60)
-    img = add_random_noise(img)
+    img = apply_random_shift(img, max_shift)
+    img = apply_random_rotation(img, max_rotation)
+
+    if noise_factor_range[1] > 0:
+        img = add_random_noise(img, noise_factor_range)
 
     # Resize image to 512x512
     img = img.resize((resolution, resolution))
@@ -38,7 +40,7 @@ def generate_qr(content, name, error_correction=qrcode.constants.ERROR_CORRECT_L
         f.write(content)
 
 
-def add_random_noise(image, noise_factor_range=(1, 75)):
+def add_random_noise(image, noise_factor_range=(1, 255)):
     """Add random pixel noise to the image with a randomized noise factor."""
     noise_factor = random.randint(noise_factor_range[0], noise_factor_range[1])
     np_image = np.array(image)
@@ -59,7 +61,7 @@ def apply_random_shift(image, max_shift=10):
     return background
 
 
-def apply_random_rotation(image, max_angle=180):
+def apply_random_rotation(image, max_angle=360):
     """Apply random rotation to the image."""
     angle = random.uniform(-max_angle, max_angle)
     image = image.rotate(angle, expand=True, fillcolor=255)
@@ -94,12 +96,15 @@ def generate_qr_code(i):
     else:
         content = generate_data(string.ascii_uppercase + string.digits, max_length)
 
-    generate_qr(content, f'QR{i}')
+    # Generate a clean and a noisy QR code
+
+    generate_qr(content, f'QR{i}_clean', noise_factor_range=(0, 0), max_shift=0, max_rotation=0)
+    generate_qr(content, f'QR{i}_dirty')
     return i
 
 
 if __name__ == '__main__':
-    count = 100_000
+    count = 5
     random.seed("Lukas G. Olson")
 
     # Using ThreadPoolExecutor for parallel processing
