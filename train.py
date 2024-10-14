@@ -200,5 +200,5 @@ def run_training(epochs=1, batch_size=16):
 
 
 if __name__ == "__main__":
-    run_training(epochs=9, batch_size=16)
+    run_training(epochs=2, batch_size=32)
     print("Training complete.")

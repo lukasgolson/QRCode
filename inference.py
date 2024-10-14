@@ -6,12 +6,13 @@ import numpy as np
 from PIL import Image
 import tensorflow as tf
 from tensorflow.keras.models import load_model
-from tensorflow.keras.layers import TextVectorization
+
 import glob
 from datetime import datetime
 
+from char_level_encoder import CharLevelEncoder
+from layers.SpatialTransformer import SpatialTransformerInputHead
 from layers.involution import Involution
-from train import SpatialTransformerInputHead
 
 
 # Function to load the latest model from the model directory
@@ -28,37 +29,6 @@ def load_latest_model(model_dir):
     return load_model(latest_model_file, custom_objects={'SpatialTransformerInputHead': SpatialTransformerInputHead,
                                                          'Involution': Involution})
 
-def char_split(input_string):
-    return tf.strings.unicode_split(input_string, 'UTF-8')
-
-def load_latest_vectorizer(vectorizer_dir):
-    vectorizer_files = glob.glob(os.path.join(vectorizer_dir, '*.pkl'))
-
-    if not vectorizer_files:
-        raise FileNotFoundError(f"No vectorizers found in directory: {vectorizer_dir}")
-
-    latest_vectorizer_file = max(vectorizer_files, key=os.path.getmtime)
-    print(f"Loading latest vectorizer: {latest_vectorizer_file}")
-
-    pickle_file = pickle.load(open(latest_vectorizer_file, "rb"))
-
-    config = pickle_file['config'].copy()
-    config['split'] = None  # or set to an empty string if needed
-
-    new_v = TextVectorization.from_config(config)
-
-
-    new_v.split = char_split
-
-
-
-    print(pickle_file['weights'])
-
-    new_v.set_weights(pickle_file['weights'])
-
-
-
-    return new_v
 
 
 # Function to preprocess the image
@@ -70,26 +40,32 @@ def preprocess_image(image_path, target_size):
 
 
 # Function to decode the predicted output to text
-def decode_prediction(prediction, vectorizer):
-    # Get the character index predictions (argmax across one-hot encoded characters)
-    char_indices = np.argmax(prediction, axis=-1)[0]
+def decode_prediction(prediction, encoder):
+    # Assuming prediction shape is (1, max_sequence_length, num_chars)
+    char_indices = np.argmax(prediction, axis=-1)  # Get indices of max predictions across the character dimension to undo one-hot encoding
 
 
-    decoded_text = ''.join([vectorizer.get_vocabulary()[i] for i in char_indices if i != 0])
-    return decoded_text
+    result = ''
+    for char_index in char_indices[0]:
+        result += encoder.index_to_char[char_index]
+
+
+    return result  # Return the first element since we expect one result
 
 
 # Main function to load image and run inference
-def run_inference(image_path, model, vectorizer, target_size):
+def run_inference(image_path, model, encoder, target_size):
     # Preprocess the image
     image = preprocess_image(image_path, target_size)
 
     # Run the image through the model
     prediction = model.predict(image)
 
+    print(prediction)
+
 
     # Decode the prediction to text
-    decoded_text = decode_prediction(prediction, vectorizer)
+    decoded_text = decode_prediction(prediction, encoder)
 
     return decoded_text
 
@@ -112,12 +88,9 @@ if __name__ == "__main__":
         exit(1)
 
 
-    # Load the latest vectorizer
-    try:
-        vectorizer = load_latest_vectorizer(args.model_dir)
-    except FileNotFoundError as e:
-        print(e)
-        exit(1)
+    # Load the char level encoder
+    encoder = CharLevelEncoder()
+
 
     # Load the latest model
     try:
@@ -136,7 +109,7 @@ if __name__ == "__main__":
 
     # Ensure the image path exists
     if os.path.exists(args.image):
-        result = run_inference(args.image, model, vectorizer, 512)
+        result = run_inference(args.image, model, encoder, 512)
         print(f"Predicted text content: {result}")
     else:
         print(f"Image not found at path: {args.image}")

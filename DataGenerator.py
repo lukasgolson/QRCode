@@ -19,7 +19,7 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         self.max_sequence_length = max_sequence_length
         self.shuffle = shuffle
         self.valid_image_files = self.load_valid_files()
-        self.encoder = CharLevelEncoder(max_sequence_length=self.max_sequence_length)
+        self.encoder = CharLevelEncoder(max_sequence_length=self.max_sequence_length, num_chars=self.num_chars)
         self.current_index = 0
 
         # Shuffle the files initially if required
@@ -42,12 +42,8 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         print(f"Found {len(valid_files)} valid files.")
         return sorted(valid_files)
 
-
-
     def __len__(self):
         return int(np.floor(len(self.valid_image_files) / self.batch_size)) - 1
-
-
 
     def __getitem__(self, index):
         # Calculate the start and end index for the batch
@@ -76,8 +72,6 @@ class QRDataGenerator(tf.keras.utils.Sequence):
             np.random.shuffle(self.valid_image_files)
         self.current_index = 0  # Reset the current index
 
-
-
     def __data_generation(self, batch_x):
         X = []
         y = []
@@ -90,18 +84,22 @@ class QRDataGenerator(tf.keras.utils.Sequence):
 
             txt_file = img_file.replace('.png', '.txt')
             content = self.load_content(txt_file)
-            encoded_content = self.encoder.encode_as_integers([content])
-            one_hot_encoded = to_categorical(encoded_content, num_classes=self.num_chars)
+
+            one_hot_encoded = self.encoder.encode(content)
+
             y.append(one_hot_encoded)
+
+
+
 
         X = np.array(X)
         y = np.array(y)
 
+
         y = y.reshape(X.shape[0], self.max_sequence_length, self.num_chars)
 
+
         return X, y
-
-
 
     def load_content(self, filename):
         with open(os.path.join(self.content_dir, filename), 'r') as file:
