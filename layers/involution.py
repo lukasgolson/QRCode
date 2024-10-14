@@ -1,10 +1,19 @@
 import keras
 import tensorflow as tf
 
+involution_id = 0
+
+
+@keras.saving.register_keras_serializable(package="qr_model")
 class Involution(keras.layers.Layer):
     def __init__(
-            self, channel, group_number, kernel_size, stride, reduction_ratio, name, **kwargs
+            self, channel, group_number, kernel_size, stride, reduction_ratio, name=None, **kwargs
     ):
+        global involution_id
+        involution_id += 1
+        if name is None:
+            name = f"involution_{involution_id}"
+
         super().__init__(name=name, **kwargs)
 
         # Initialize the parameters.
@@ -104,3 +113,22 @@ class Involution(keras.layers.Layer):
 
         # Return the output tensor and the kernel.
         return output, kernel
+
+    def get_config(self):
+        # Get the base configuration from the parent class.
+        base_config = super().get_config()
+        # Add the Involution-specific parameters to the config.
+        config = {
+            "channel": self.channel,
+            "group_number": self.group_number,
+            "kernel_size": self.kernel_size,
+            "stride": self.stride,
+            "reduction_ratio": self.reduction_ratio,
+        }
+        # Merge and return the complete configuration.
+        return {**base_config, **config}
+
+    @classmethod
+    def from_config(cls, config):
+        # Create the layer from the provided config.
+        return cls(**config)
