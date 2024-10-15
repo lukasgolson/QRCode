@@ -30,7 +30,7 @@ def get_compiled_model(max_sequence_length=512, num_chars=128, target_image_size
     input_shape = (target_image_size, target_image_size, 1)  # Define the input shape for the images
 
     model = create_model(input_shape, max_sequence_length, num_chars)
-    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer='adamw', loss='categorical_crossentropy', metrics=['accuracy'])
     return model
 
 
