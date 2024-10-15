@@ -93,7 +93,7 @@ class QRDataGenerator(tf.keras.utils.Sequence):
 
         y = pad_sequences(y, maxlen=self.max_sequence_length, padding='post', value=100)  # Use 0 for padding
 
-        print(y)
+       # print(y)
 
         # y = y.reshape(X.shape[0], self.max_sequence_length, self.num_chars)
 
