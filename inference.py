@@ -26,8 +26,7 @@ def load_latest_model(model_dir):
     # Extract modification times and sort by latest
     latest_model_file = max(model_files, key=os.path.getmtime)
     print(f"Loading latest model: {latest_model_file}")
-    return load_model(latest_model_file, custom_objects={'SpatialTransformerInputHead': SpatialTransformerInputHead,
-                                                         'Involution': Involution})
+    return load_model(latest_model_file)
 
 
 
@@ -41,6 +40,9 @@ def preprocess_image(image_path, target_size):
 
 # Function to decode the predicted output to text
 def decode_prediction(prediction, encoder):
+
+    encoder.print_vocabulary()
+
     return encoder.decode(prediction)
 
 
@@ -55,6 +57,11 @@ def run_inference(image_path, model, encoder, target_size):
 
     # Run the image through the model
     prediction = model.predict(image)
+
+
+    # print entire prediction output
+
+    print(prediction)
 
 
 

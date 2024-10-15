@@ -2,7 +2,7 @@ import os
 import numpy as np
 import tensorflow as tf
 from PIL import Image
-from keras.src.utils import to_categorical
+from keras.src.utils import to_categorical, pad_sequences
 from tqdm import tqdm
 
 from char_level_encoder import CharLevelEncoder
@@ -88,15 +88,14 @@ class QRDataGenerator(tf.keras.utils.Sequence):
 
             y.append(one_hot_encoded)
 
-
-
-
         X = np.array(X)
         y = np.array(y)
 
+        y = pad_sequences(y, maxlen=self.max_sequence_length, padding='post', value=100)  # Use 0 for padding
 
-        y = y.reshape(X.shape[0], self.max_sequence_length, self.num_chars)
+        print(y)
 
+        # y = y.reshape(X.shape[0], self.max_sequence_length, self.num_chars)
 
         return X, y
 

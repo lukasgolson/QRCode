@@ -18,7 +18,6 @@ class CharLevelEncoder:
         self.index_to_char = {idx: char for idx, char in enumerate(self.vocab)}
         self.num_chars = num_chars
 
-
     @staticmethod
     def _create_default_vocab():
         """
@@ -27,6 +26,15 @@ class CharLevelEncoder:
         :return: String of printable ASCII characters.
         """
         return string.printable + ' '
+
+    def print_vocabulary(self):
+        # Print the header
+        print(f"{'Index':<6} {'Character':<10}")
+        print("-" * 16)  # Separator line
+
+        # Print each index and character
+        for index, char in self.index_to_char.items():
+            print(f"{index:<6} {char:<10}")
 
     def encode(self, text):
         """
@@ -47,7 +55,7 @@ class CharLevelEncoder:
 
         return encoded_texts
 
-    def decode(self, prediction):
+    def decode(self, prediction: np.ndarray) -> str:
         """
         Decode one-hot encoded model outputs back to text.
 
@@ -55,18 +63,20 @@ class CharLevelEncoder:
         :return: Decoded string.
         """
 
-        decoded_text = ''
-        for char_vector in prediction:
-            char_index = np.argmax(char_vector)
+        # Check if the prediction has the expected dimensions
+        if prediction.ndim != 3:
+            raise ValueError("Expected prediction to be a 3D array (batch_size, max_sequence_length, num_chars).")
 
-            if char_index > len(self.index_to_char):
-                print(f"char_index: {char_index}")
+        decoded_text = []
+        # Assuming we're only interested in the first sequence in the batch (index 0)
+        for char_vector in prediction[0]:  # Select the first sequence in the batch
+            char_index = np.argmax(char_vector)  # Get the index of the highest probability
+            if char_index < len(self.index_to_char):  # Ensure index is within vocabulary range
+                decoded_text.append(self.index_to_char[char_index])  # Append corresponding character
             else:
-                decoded_text += self.index_to_char[char_index]
+                decoded_text.append('�')  # Append a placeholder for unknown characters
 
-        return decoded_text
-
-
+        return ''.join(decoded_text)  # Join list into a single string for efficiency
 
     def save_encoder(self, filepath):
         """
