@@ -69,8 +69,8 @@ def create_involution_architecture(input_tensor, length, channels=16, group_numb
                 x = keras.layers.MaxPooling2D((2, 2))(x)
                 current_height //= 2  # Update the current height to reflect the downscaling
 
-        # Add spatial attention at each layer
-        x = add_spatial_attention(x)
+        if i % 2 == 0:
+            x = add_spatial_attention(x)
 
     return x
 
@@ -105,7 +105,7 @@ def create_adaptor_architecture(input_tensor, max_sequence_length=512, num_chars
     pos_encoding = positional_encoding(max_sequence_length, x.shape[-1])
     x += pos_encoding
 
-    x = MultiHeadAttention(num_heads=8, key_dim=x.shape[-1])(x, x)
+    x = MultiHeadAttention(num_heads=4, key_dim=x.shape[-1])(x, x)
 
     x = layers.Dense(num_chars, activation='relu')(x)
 
