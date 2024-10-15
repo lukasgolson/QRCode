@@ -7,8 +7,9 @@ import numpy as np
 import tensorflow as tf
 from PIL import Image
 from keras import layers, Model
+from keras.src.layers import MultiHeadAttention, GlobalAveragePooling2D, Reshape, Multiply
 from tensorflow.keras.callbacks import TensorBoard
-from tensorflow.keras.layers import Dropout
+from tensorflow.keras.layers import Dropout, Dense
 
 from DataGenerator import QRDataGenerator
 from layers.SpatialTransformer import SpatialTransformerInputHead
@@ -32,6 +33,49 @@ gpus = tf.config.list_physical_devices('GPU')
 print(f"GPUs: {gpus}")
 
 
+def add_spatial_attention(x):
+    # Global average pooling
+    avg_pooled = GlobalAveragePooling2D()(x)
+    # Reshape to match the spatial dimensions
+    attention_weights = Reshape((1, 1, x.shape[-1]))(avg_pooled)
+    # Dense layer to learn spatial weights
+    attention_weights = Dense(x.shape[-1], activation='sigmoid')(attention_weights)
+    # Multiply original feature map by attention weights
+    return Multiply()([x, attention_weights])
+
+
+def create_involution_architecture(input_tensor, length, channels=16, group_number=1):
+    x = input_tensor
+    current_height = input_tensor.shape[1]  # Get the current height of the input image (assuming square input)
+
+    for i in range(length):
+        print(f"Involution layer {i}")
+        channels_count = channels * (2 ** i)
+
+        # Convolution to adjust the number of channels
+        x = keras.layers.Conv2D(channels_count, (1, 1), activation='relu')(x)
+
+        # Involution layer with stride 1 (to avoid automatic downscaling)
+        x, _ = Involution(
+            channel=channels_count, group_number=group_number, kernel_size=3, stride=1, reduction_ratio=2)(x)
+
+        # Batch Normalization and ReLU
+        x = layers.BatchNormalization()(x)
+        x = keras.layers.ReLU()(x)
+
+        # Apply MaxPooling only if the current image size is greater than 64x64
+        if current_height > 64:
+            if i % 2 == 0:  # Apply MaxPooling every 2 layers
+                x = keras.layers.MaxPooling2D((2, 2))(x)
+                current_height //= 2  # Update the current height to reflect the downscaling
+
+        # Add spatial attention at each layer
+        x = add_spatial_attention(x)
+
+    return x
+
+
+
 @keras.saving.register_keras_serializable(package="qr_model", name="positional_encoding")
 def positional_encoding(length, depth):
     """Generates a positional encoding matrix for a given sequence length and depth (embedding size)."""
@@ -49,37 +93,6 @@ def positional_encoding(length, depth):
     return tf.cast(pos_encoding, dtype=tf.float32)
 
 
-def create_involution_architecture(input_tensor, length, channels=16, group_number=1):
-    x = input_tensor
-
-    for i in range(length):
-        print(f"Involution layer {i}")
-        channels_count = channels * (2 ** i)
-
-        x = keras.layers.Conv2D(channels_count, (1, 1), activation='relu')(x)
-
-        x, _ = Involution(
-            channel=channels_count, group_number=group_number, kernel_size=3, stride=2, reduction_ratio=2)(x)
-
-        x = layers.BatchNormalization()(x)
-
-        x = keras.layers.ReLU()(x)
-
-        x = keras.layers.MaxPooling2D((2, 2))(x)
-
-    return x
-
-
-def calculate_x_y_z(total_elements):
-    for z in range(1, total_elements + 1):
-        if total_elements % z == 0:  # Check if z divides total_elements
-            x_squared = total_elements // z
-            x = int(math.sqrt(x_squared))
-            if x * x == x_squared:  # Check if x is a whole number
-                return x, x, z
-    return None
-
-
 def create_adaptor_architecture(input_tensor, max_sequence_length=512, num_chars=128):
     x = input_tensor
 
@@ -92,6 +105,8 @@ def create_adaptor_architecture(input_tensor, max_sequence_length=512, num_chars
     pos_encoding = positional_encoding(max_sequence_length, x.shape[-1])
     x += pos_encoding
 
+    x = MultiHeadAttention(num_heads=8, key_dim=x.shape[-1])(x, x)
+
     x = layers.Dense(num_chars, activation='relu')(x)
 
     x = layers.BatchNormalization()(x)
@@ -100,7 +115,8 @@ def create_adaptor_architecture(input_tensor, max_sequence_length=512, num_chars
 
     return x
 
-def create_dense_architecture(input_tensor, units = 128, depth = 4):
+
+def create_dense_architecture(input_tensor, units=128, depth=4):
     x = input_tensor
 
     for i in range(depth):
@@ -109,7 +125,6 @@ def create_dense_architecture(input_tensor, units = 128, depth = 4):
         x = layers.BatchNormalization()(x)
 
     return x
-
 
 
 def create_model(input_shape, max_sequence_length, num_chars):
