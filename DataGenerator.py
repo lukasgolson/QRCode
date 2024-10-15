@@ -42,7 +42,7 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         return sorted(valid_files)
 
     def __len__(self):
-        return int(np.floor(len(self.valid_image_files) / self.batch_size)) - 1
+        return int(np.floor(len(self.valid_image_files) / self.batch_size))
 
     def __getitem__(self, index):
         # Calculate the start and end index for the batch
@@ -90,8 +90,6 @@ class QRDataGenerator(tf.keras.utils.Sequence):
 
         X = np.array(X)
         y = np.array(y)
-
-        y = pad_sequences(y, maxlen=self.max_sequence_length, padding='post', value=100)  # Use 0 for padding
 
        # print(y)
 

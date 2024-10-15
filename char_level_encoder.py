@@ -49,10 +49,6 @@ class CharLevelEncoder:
             if char in self.char_to_index:
                 encoded_texts[j, self.char_to_index[char]] = 1.0
 
-        # Add padding if the text is shorter than the maximum sequence length
-        if len(text) < self.max_sequence_length:
-            encoded_texts[len(text):, self.char_to_index[' ']] = 1.0
-
         return encoded_texts
 
     def decode(self, prediction: np.ndarray) -> str:
@@ -67,10 +63,18 @@ class CharLevelEncoder:
         if prediction.ndim != 3:
             raise ValueError("Expected prediction to be a 3D array (batch_size, max_sequence_length, num_chars).")
 
+
+        prediction = np.exp(prediction) / np.sum(np.exp(prediction), axis=-1, keepdims=True)
+
+        predicted_classes = np.argmax(prediction, axis=-1)  # This will give us indices for each of the 512 steps
+
+
+
+
+
         decoded_text = []
         # Assuming we're only interested in the first sequence in the batch (index 0)
-        for char_vector in prediction[0]:  # Select the first sequence in the batch
-            char_index = np.argmax(char_vector)  # Get the index of the highest probability
+        for char_index in predicted_classes[0]:  # Select the first sequence in the batch
             if char_index < len(self.index_to_char):  # Ensure index is within vocabulary range
                 decoded_text.append(self.index_to_char[char_index])  # Append corresponding character
             else:
