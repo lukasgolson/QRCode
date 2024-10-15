@@ -19,7 +19,7 @@ class SpatialTransformerInputHead(keras.layers.Layer):
         bias_initializer = Constant([1, 0, 0, 0, 1, 0])
 
         self.transformation_model = keras.Sequential([
-            keras.layers.Conv2D(14, (5, 5), padding='valid', activation='relu', name="test"),
+            keras.layers.Conv2D(14, (5, 5), padding='valid', activation='relu'),
             keras.layers.MaxPooling2D((2, 2), strides=2),
             keras.layers.Conv2D(32, (5, 5), padding='valid', activation='relu'),
             keras.layers.MaxPooling2D((2, 2), strides=2),
