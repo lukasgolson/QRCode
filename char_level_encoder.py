@@ -58,7 +58,10 @@ class CharLevelEncoder:
         decoded_text = ''
         for char_vector in prediction:
             char_index = np.argmax(char_vector)
-            if char_index != 0:  # Assuming index 0 is padding or unknown
+
+            if char_index > len(self.index_to_char):
+                print(f"char_index: {char_index}")
+            else:
                 decoded_text += self.index_to_char[char_index]
 
         return decoded_text

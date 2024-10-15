@@ -41,16 +41,11 @@ def preprocess_image(image_path, target_size):
 
 # Function to decode the predicted output to text
 def decode_prediction(prediction, encoder):
-    # Assuming prediction shape is (1, max_sequence_length, num_chars)
-    char_indices = np.argmax(prediction, axis=-1)  # Get indices of max predictions across the character dimension to undo one-hot encoding
+    return encoder.decode(prediction)
 
 
-    result = ''
-    for char_index in char_indices[0]:
-        result += encoder.index_to_char[char_index]
 
-
-    return result  # Return the first element since we expect one result
+    #return result  # Return the first element since we expect one result
 
 
 # Main function to load image and run inference
@@ -61,11 +56,12 @@ def run_inference(image_path, model, encoder, target_size):
     # Run the image through the model
     prediction = model.predict(image)
 
-    print(prediction)
 
 
     # Decode the prediction to text
     decoded_text = decode_prediction(prediction, encoder)
+
+    print(len(decoded_text))
 
     return decoded_text
 
