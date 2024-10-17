@@ -29,31 +29,43 @@ def positional_encoding(length, depth):
 
 def create_involution_architecture(input_tensor, length, min_resolution=64, max_channels=128, group_number=1):
     x = input_tensor
-    current_height = input_tensor.shape[1]  # Get the current height of the input image (assuming square input)
 
-    current_channels = input_tensor.shape[-1] + 1  # Get the number of channels in the input tensor
+    height = input_tensor.shape[1]
+    width = input_tensor.shape[2]
+    side_length = min(height, width)
+
+    layer_channels = input_tensor.shape[-1] + 1  # Get the number of channels in the input tensor
 
     for i in range(length):
+
         print(f"Involution layer {i}")
-        current_channels = min(current_channels * (2 ** i), max_channels)
+        layer_channels = min(layer_channels * (2 ** i), max_channels)
+
+        residual = x
 
         # Convolution to adjust the number of channels
-        x = keras.layers.Conv2D(current_channels, (1, 1), activation='relu')(x)
+        x = keras.layers.Conv2D(layer_channels, (1, 1), activation='mish')(x)
 
         # Involution layer with stride 1 (to avoid automatic downscaling)
         x, _ = Involution(
-            channel=current_channels, group_number=group_number, kernel_size=3, stride=1, reduction_ratio=2)(x)
+            channel=layer_channels, group_number=group_number, kernel_size=3, stride=1, reduction_ratio=2)(x)
 
-        # Batch Normalization and ReLU
         x = layers.BatchNormalization()(x)
-        x = keras.layers.ReLU()(x)
 
-        # Apply MaxPooling only if the current image size is greater than 64x64
-        if current_height > min_resolution:
-            x = keras.layers.MaxPooling2D((2, 2))(x)
-            current_height //= 2  # Update the current height to reflect the downscaling
+        if residual.shape[-1] != x.shape[-1]:
+            residual = keras.layers.Conv2D(x.shape[-1], (1, 1))(residual)  # Adjust dimensions if needed
+        x += residual  # Add the residual connectio
+        x = keras.layers.ReLU()(x)  # Re-apply activation
 
-        #x = SpatialAttention()(x)
+
+
+
+
+        if side_length > min_resolution:
+            x = keras.layers.Conv2D(layer_channels, (1, 1), strides=(2, 2))(x)
+            side_length //= 2  # Update the current height to reflect the downscaling
+
+        # x = SpatialAttention()(x)
 
     return x
 
@@ -64,7 +76,7 @@ def create_encoder_architecture(input_tensor, max_sequence_length=512, num_chars
     x = layers.BatchNormalization()(x)
 
     x = layers.Flatten()(x)
-    x = layers.Dense(max_sequence_length, activation='relu')(x)
+    x = layers.Dense(max_sequence_length, activation='mish')(x)
     x = layers.Reshape((max_sequence_length, -1))(x)
 
     pos_encoding = positional_encoding(max_sequence_length, x.shape[-1])
@@ -72,7 +84,7 @@ def create_encoder_architecture(input_tensor, max_sequence_length=512, num_chars
 
     x = MultiHeadAttention(num_heads=8, key_dim=x.shape[-1])(x, x)
 
-    x = layers.Dense(num_chars, activation='relu')(x)
+    x = layers.Dense(num_chars, activation='mish')(x)
 
     x = layers.BatchNormalization()(x)
 
@@ -81,7 +93,7 @@ def create_encoder_architecture(input_tensor, max_sequence_length=512, num_chars
     return x
 
 
-def create_dense_architecture(input_tensor, units=512, depth=3):
+def create_dense_architecture(input_tensor, units=512, min_units=96, depth=3):
     x = input_tensor
 
     # Initialize a list to hold the units for each layer
@@ -93,19 +105,33 @@ def create_dense_architecture(input_tensor, units=512, depth=3):
     for i in range(depth):
         # Calculate the units for the current layer
         if i < depth - 1:
-            current_units = remaining_units // (depth - i)  # Distribute remaining units evenly
+            # Distribute remaining units evenly but ensure no layer goes below min_units
+            current_units = max(min_units, remaining_units // (depth - i))
         else:
-            current_units = remaining_units  # Assign the rest to the last layer
+            # Assign the rest to the last layer, ensuring it's at least min_units
+            current_units = max(min_units, remaining_units)
 
         units_per_layer.append(current_units)
         remaining_units -= current_units
 
-    # Build the model using the calculated units
-    for current_units in units_per_layer:
-        current_units = max(1, current_units)  # Ensure at least 1 unit
-        x = layers.Dense(current_units, activation='relu')(x)
+    # Build the model using the calculated units with residual layers
+    for i, current_units in enumerate(units_per_layer):
+        # Save the input to add it later for the residual connection
+        residual = x
+
+        # Main branch
+        x = layers.Dense(current_units, activation='mish')(x)
         x = Dropout(0.25)(x)
         x = layers.BatchNormalization()(x)
+
+        # Projection if necessary to match dimensions
+        if residual.shape[-1] != current_units:
+            residual = layers.Dense(current_units)(residual)  # Match dimensions
+
+        # Add the residual connection
+        x = layers.Add()([x, residual])
+
+        x = layers.ReLU()(x)
 
     return x
 
@@ -128,7 +154,9 @@ def create_model(input_shape, max_sequence_length, num_chars):
     x = layers.LSTM(128, return_sequences=True)(x)
     x = layers.LSTM(128, return_sequences=True)(x)
 
-    x = create_dense_architecture(x, 256, 2)
+    x = create_dense_architecture(x, 512, 98,3)
+
+    x = layers.Dense(num_chars, activation='mish')(x)
 
     outputs = layers.TimeDistributed(layers.Dense(num_chars, activation='softmax'))(x)
 
