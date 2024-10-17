@@ -90,33 +90,29 @@ def create_encoder_architecture(input_tensor, max_sequence_length=512, num_chars
     return x
 
 
-def create_dense_architecture(input_tensor, units=512, depth=3):
+def create_dense_architecture(input_tensor, units=256, depth=3):
     x = input_tensor
 
-    # Initialize a list to hold the units for each layer
-    units_per_layer = []
-
-    # Calculate the total distribution while keeping it pyramidal
-    remaining_units = units
-
+    # Build the model using the same number of units for each layer
     for i in range(depth):
-        # Calculate the units for the current layer
-        if i < depth - 1:
-            current_units = remaining_units // (depth - i)  # Distribute remaining units evenly
-        else:
-            current_units = remaining_units  # Assign the rest to the last layer
+        # Save the input to add as a residual if necessary
+        residual = x
 
-        units_per_layer.append(current_units)
-        remaining_units -= current_units
+        # Apply dense layer with a constant number of units
+        x = layers.Dense(units, activation='mish')(x)
+        x = Dropout(0.2)(x)
 
-    # Build the model using the calculated units
-    for current_units in units_per_layer:
-        current_units = max(1, current_units)  # Ensure at least 1 unit
-        x = layers.Dense(current_units, activation='mish')(x)
-        x = Dropout(0.25)(x)
+
+        # Add residual connection after the first layer
+        if i > 0:
+            x = layers.Add()([x, residual])  # Residual connection
+
+        # Apply normalization and activation after the add operation
         x = layers.BatchNormalization()(x)
+        x = layers.Activation('mish')(x)  # 'mish' is applied here
 
     return x
+
 
 
 def create_model(input_shape, max_sequence_length, num_chars):
@@ -128,7 +124,7 @@ def create_model(input_shape, max_sequence_length, num_chars):
 
     # Build the involution architecture
 
-    x = SpatialAttention()(processing_head)
+    x = SpatialAttention(use_skip_connection=True)(processing_head)
 
     x = create_involution_architecture(x, 3, 16, 4)
 
@@ -137,7 +133,7 @@ def create_model(input_shape, max_sequence_length, num_chars):
     x = layers.LSTM(128, return_sequences=True)(x)
     x = layers.LSTM(128, return_sequences=True)(x)
 
-    x = create_dense_architecture(x, 256, 2)
+    x = create_dense_architecture(x, 256, 3)
 
     outputs = layers.TimeDistributed(layers.Dense(num_chars, activation='softmax'))(x)
 
