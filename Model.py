@@ -51,7 +51,9 @@ def create_involution_architecture(input_tensor, length, min_resolution=64, max_
 
         # Apply MaxPooling only if the current image size is greater than 64x64
         if current_height > min_resolution:
-            x = keras.layers.MaxPooling2D((2, 2))(x)
+            #x = keras.layers.MaxPooling2D((2, 2))(x)
+
+            x = keras.layers.Conv2D(current_channels, (1, 1), (2,2), activation='mish')(x)
             current_height //= 2  # Update the current height to reflect the downscaling
 
         #x = SpatialAttention()(x)
