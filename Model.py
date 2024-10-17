@@ -38,6 +38,8 @@ def create_involution_architecture(input_tensor, length, min_resolution=64, max_
         print(f"Involution layer {i}")
         current_channels = min(current_channels * (2 ** i), max_channels)
 
+        residual = x
+
         # Convolution to adjust the number of channels
         x = keras.layers.Conv2D(current_channels, (1, 1), activation='mish')(x)
 
@@ -45,18 +47,22 @@ def create_involution_architecture(input_tensor, length, min_resolution=64, max_
         x, _ = Involution(
             channel=current_channels, group_number=group_number, kernel_size=3, stride=1, reduction_ratio=2)(x)
 
+
+        if residual.shape[-1] != x.shape[-1]:
+            residual = keras.layers.Conv2D(x.shape[-1], (1, 1))(residual)
+
+        x = layers.add([x, residual])
+
         # Batch Normalization and mish
         x = layers.BatchNormalization()(x)
         x = Mish()(x)
 
         # Apply MaxPooling only if the current image size is greater than 64x64
         if current_height > min_resolution:
-            #x = keras.layers.MaxPooling2D((2, 2))(x)
-
-            x = keras.layers.Conv2D(current_channels, (1, 1), (2,2), activation='mish')(x)
+            x = keras.layers.Conv2D(current_channels, (1, 1), (2, 2), activation='mish')(x)
             current_height //= 2  # Update the current height to reflect the downscaling
 
-        #x = SpatialAttention()(x)
+        # x = SpatialAttention()(x)
 
     return x
 
