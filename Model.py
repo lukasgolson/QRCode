@@ -5,6 +5,7 @@ from keras import layers, Model
 from keras.src.layers import MultiHeadAttention
 from tensorflow.keras.layers import Dropout
 
+from layers.Activations import Mish
 from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformerInputHead
 from layers.involution import Involution
@@ -38,19 +39,21 @@ def create_involution_architecture(input_tensor, length, min_resolution=64, max_
         current_channels = min(current_channels * (2 ** i), max_channels)
 
         # Convolution to adjust the number of channels
-        x = keras.layers.Conv2D(current_channels, (1, 1), activation='relu')(x)
+        x = keras.layers.Conv2D(current_channels, (1, 1), activation='mish')(x)
 
         # Involution layer with stride 1 (to avoid automatic downscaling)
         x, _ = Involution(
             channel=current_channels, group_number=group_number, kernel_size=3, stride=1, reduction_ratio=2)(x)
 
-        # Batch Normalization and ReLU
+        # Batch Normalization and mish
         x = layers.BatchNormalization()(x)
-        x = keras.layers.ReLU()(x)
+        x = Mish()(x)
 
         # Apply MaxPooling only if the current image size is greater than 64x64
         if current_height > min_resolution:
-            x = keras.layers.MaxPooling2D((2, 2))(x)
+            #x = keras.layers.MaxPooling2D((2, 2))(x)
+
+            x = keras.layers.Conv2D(current_channels, (1, 1), (2,2), activation='mish')(x)
             current_height //= 2  # Update the current height to reflect the downscaling
 
         #x = SpatialAttention()(x)
@@ -64,7 +67,7 @@ def create_encoder_architecture(input_tensor, max_sequence_length=512, num_chars
     x = layers.BatchNormalization()(x)
 
     x = layers.Flatten()(x)
-    x = layers.Dense(max_sequence_length, activation='relu')(x)
+    x = layers.Dense(max_sequence_length, activation='mish')(x)
     x = layers.Reshape((max_sequence_length, -1))(x)
 
     pos_encoding = positional_encoding(max_sequence_length, x.shape[-1])
@@ -72,7 +75,7 @@ def create_encoder_architecture(input_tensor, max_sequence_length=512, num_chars
 
     x = MultiHeadAttention(num_heads=8, key_dim=x.shape[-1])(x, x)
 
-    x = layers.Dense(num_chars, activation='relu')(x)
+    x = layers.Dense(num_chars, activation='mish')(x)
 
     x = layers.BatchNormalization()(x)
 
@@ -103,7 +106,7 @@ def create_dense_architecture(input_tensor, units=512, depth=3):
     # Build the model using the calculated units
     for current_units in units_per_layer:
         current_units = max(1, current_units)  # Ensure at least 1 unit
-        x = layers.Dense(current_units, activation='relu')(x)
+        x = layers.Dense(current_units, activation='mish')(x)
         x = Dropout(0.25)(x)
         x = layers.BatchNormalization()(x)
 
