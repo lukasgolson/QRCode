@@ -26,15 +26,16 @@ gpus = tf.config.list_physical_devices('GPU')
 print(f"GPUs: {gpus}")
 
 
-def get_compiled_model(max_sequence_length=512, num_chars=128, target_image_size=512):
+def get_compiled_model(max_sequence_length=512, num_chars=128, target_image_size=512, gradient_accumulation_steps=1):
     input_shape = (target_image_size, target_image_size, 1)  # Define the input shape for the images
 
     model = create_model(input_shape, max_sequence_length, num_chars)
-    model.compile(optimizer='adamw', loss='categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer=keras.optimizers.AdamW(gradient_accumulation_steps=gradient_accumulation_steps),
+                  loss='categorical_crossentropy', metrics=['accuracy'])
     return model
 
 
-def make_or_restore_model(max_sequence_length=512, num_chars=128, target_image_size=512):
+def make_or_restore_model(max_sequence_length=512, num_chars=128, target_image_size=512, gradient_accumulation_steps=1):
     # Either restore the latest model, or create a fresh one
     # if there is no checkpoint available.
 
@@ -44,15 +45,17 @@ def make_or_restore_model(max_sequence_length=512, num_chars=128, target_image_s
         print("Restoring from", latest_checkpoint)
         return keras.models.load_model(latest_checkpoint)
     print("Creating a new model")
-    return get_compiled_model(max_sequence_length, num_chars, target_image_size)
+    return get_compiled_model(max_sequence_length, num_chars, target_image_size, gradient_accumulation_steps)
 
 
-def run_training(epochs=1, batch_size=16):
+def run_training(epochs=1, batch_size=16, gradient_accumulation_steps=None):
     max_sequence_length = 512
     num_chars = 128
     target_image_size = 512
 
     strategy = tf.distribute.MirroredStrategy()
+
+    keras.mixed_precision.set_global_policy("mixed_float16")
 
     tf.keras.backend.clear_session()
 
@@ -61,7 +64,7 @@ def run_training(epochs=1, batch_size=16):
 
     callbacks = [
 
-        TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=True),
+        TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=True, update_freq=500),
         keras.callbacks.ModelCheckpoint(
             filepath=checkpoint_dir + "/ckpt-{epoch}.keras", save_freq="epoch"
         )
@@ -74,20 +77,23 @@ def run_training(epochs=1, batch_size=16):
 
     print("Created data generator")
 
-    with strategy.scope():
-        model = make_or_restore_model(max_sequence_length, num_chars, target_image_size)
-        model.summary()
-
-        model.fit(qr_data_gen, epochs=epochs, callbacks=callbacks)
-
-    date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
     # Save the model
     save_path = 'models'
     os.makedirs(save_path, exist_ok=True)  # Create the directory if it does not exist
+    date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    with strategy.scope():
+        model = make_or_restore_model(max_sequence_length, num_chars, target_image_size, gradient_accumulation_steps)
+        model.summary()
+        # keras.utils.plot_model(model, to_file='model.png', show_shapes=True, show_layer_names=True, expand_nested=True, show_trainable=True, show_layer_activations=True, dpi=800)
+
+        model.save(os.path.join(save_path, f'qr_model_empty_{date}.keras'))
+
+        model.fit(qr_data_gen, epochs=epochs, callbacks=callbacks)
+
     model.save(os.path.join(save_path, f'qr_model_{date}.keras'))
 
 
 if __name__ == "__main__":
-    run_training(epochs=8, batch_size=8)
+    run_training(epochs=8, batch_size=8, gradient_accumulation_steps=None)
     print("Training complete.")

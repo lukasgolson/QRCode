@@ -11,6 +11,7 @@ from layers.SpatialTransformer import SpatialTransformerInputHead
 from layers.involution import Involution
 
 
+@tf.function
 @keras.saving.register_keras_serializable(package="qr_model", name="positional_encoding")
 def positional_encoding(length, depth):
     """Generates a positional encoding matrix for a given sequence length and depth (embedding size)."""
@@ -47,7 +48,6 @@ def create_involution_architecture(input_tensor, length, min_resolution=64, max_
         x, _ = Involution(
             channel=current_channels, group_number=group_number, kernel_size=3, stride=1, reduction_ratio=2)(x)
 
-
         if residual.shape[-1] != x.shape[-1]:
             residual = keras.layers.Conv2D(x.shape[-1], (1, 1))(residual)
 
@@ -66,7 +66,7 @@ def create_involution_architecture(input_tensor, length, min_resolution=64, max_
 
     return x
 
-
+# The idea is to turn the image into a sequence of vectors that can be used to turn into text
 def create_encoder_architecture(input_tensor, max_sequence_length=512, num_chars=128):
     x = input_tensor
 
@@ -102,7 +102,6 @@ def create_dense_architecture(input_tensor, units=256, depth=3):
         x = layers.Dense(units, activation='mish')(x)
         x = Dropout(0.2)(x)
 
-
         # Add residual connection after the first layer
         if i > 0:
             x = layers.Add()([x, residual])  # Residual connection
@@ -112,7 +111,6 @@ def create_dense_architecture(input_tensor, units=256, depth=3):
         x = layers.Activation('mish')(x)  # 'mish' is applied here
 
     return x
-
 
 
 def create_model(input_shape, max_sequence_length, num_chars):
