@@ -59,6 +59,9 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
         x = BatchNormalization()(x)
         x = Mish()(x)
 
+        x = SpatialAttention(use_skip_connection=True)(x)
+
+
         # Check if downscale_frequency is non-zero before the modulo operation
         if downscale_frequency > 0 and total_downscales > 0 and i % downscale_frequency == 0:
             if current_height > min_resolution and current_width > min_resolution:
@@ -131,7 +134,7 @@ def create_encoder_architecture(input_tensor, max_sequence_length=512, char_coun
     # reshape into sequence of 512
     x = layers.Reshape((max_sequence_length, -1))(x)
 
-    x = create_dense_architecture(x, units=512, depth=dense_layers)
+    x = create_dense_architecture(x, units=256, depth=dense_layers)
 
     x = PositionalEncoding()(x)
 
@@ -146,9 +149,6 @@ def create_encoder_architecture(input_tensor, max_sequence_length=512, char_coun
 
     x = layers.TimeDistributed(layers.Dense(char_count, activation='mish'))(x)
 
-    x = layers.BatchNormalization()(x)
-    x = layers.Activation('mish')(x)
-
     return x
 
 
@@ -157,11 +157,12 @@ def create_model(input_shape, max_sequence_length, num_chars):
     inputs = layers.Input(shape=input_shape)
 
     # Instantiate the SpatialTransformerInputHead
-    processing_head = SpatialTransformerInputHead()(inputs)  # Ensure the output is used correctly
+    processing_head = SpatialTransformerInputHead(downscaling=2)(inputs)  # Ensure the output is used correctly
 
     attention = SpatialAttention(use_skip_connection=True)(processing_head)
 
-    x = create_cnn_architecture(attention, 1, 64, 64)
+    x = create_cnn_architecture(attention, 4, 64, 64)
+
 
     x = create_encoder_architecture(x, max_sequence_length, dense_layers=4)
 

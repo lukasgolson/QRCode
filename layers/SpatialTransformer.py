@@ -8,14 +8,23 @@ import tensorflow as tf
 
 @keras.saving.register_keras_serializable(package="qr_model", name="SpatialTransformerInputHead")
 class SpatialTransformerInputHead(keras.layers.Layer):
-    def __init__(self, **kwargs):
+    def __init__(self, downscaling=2, **kwargs):
         super().__init__(**kwargs)
+
+        self.avg_pool = None
+        self.downscaling = downscaling
+
 
         self.transformation_model = None
 
         self.output_layer = None
 
     def build(self, input_shape):
+
+        self.avg_pool = keras.layers.AveragePooling2D(pool_size=(self.downscaling,self.downscaling), padding='valid')
+
+
+
         bias_initializer = Constant([1, 0, 0, 0, 1, 0])
 
         self.transformation_model = keras.Sequential([
@@ -33,17 +42,26 @@ class SpatialTransformerInputHead(keras.layers.Layer):
         ]
         )
 
-        self.transformation_model.build(input_shape)
+        self.avg_pool.build(input_shape)
 
-        self.output_layer = Conv2D(1, (1, 1), activation='sigmoid')  # Adjust as necessary for your output
+        avg_pool_output_shape = self.avg_pool.compute_output_shape(input_shape)
+
+        self.transformation_model.build(avg_pool_output_shape)
+
+        self.output_layer = Conv2D(1, (1, 1), activation='sigmoid')
 
         self.output_layer.build(input_shape)
+
+
 
     def compute_output_shape(self, input_shape):
         return self.output_layer.compute_output_shape(input_shape)
 
     def call(self, inputs):
-        transformations = self.transformation_model(inputs)
+
+        downscaled_inputs = self.avg_pool(inputs)
+
+        transformations = self.transformation_model(downscaled_inputs)
 
         # Apply spatial transformation
         grids = generate_normalized_homo_meshgrids(inputs)
@@ -57,9 +75,7 @@ class SpatialTransformerInputHead(keras.layers.Layer):
 
     def get_config(self):
         base_config = super(SpatialTransformerInputHead, self).get_config()
-        config = {
-
-        }
+        config = {'downscaling': self.downscaling}
         return {**base_config, **config}
 
     @classmethod
