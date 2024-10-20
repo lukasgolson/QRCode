@@ -1,11 +1,10 @@
 import keras
+from keras.layers import Conv2D, Multiply, Activation, Add, BatchNormalization, Concatenate
 from keras import layers
-from keras.layers import Conv2D, Multiply, Activation, Add, BatchNormalization
-from keras.src.layers import Dense
 
 
 @keras.saving.register_keras_serializable(package="qr_model", name="SpatialAttention")
-class SpatialAttention(layers.Layer):
+class SpatialAttention(keras.layers.Layer):
     """
     A Keras layer that applies spatial attention to the input features using CNN.
     It computes attention weights based on convolutional operations on the input
@@ -15,13 +14,23 @@ class SpatialAttention(layers.Layer):
 
     def __init__(self, use_skip_connection=False, **kwargs):
         """
-        Initializes the CNNSpatialAttention layer.
+        Initializes the SpatialAttention layer.
 
         Args:
             use_skip_connection (bool): If True, enables the skip connection.
             **kwargs: Additional keyword arguments passed to the parent class.
         """
         super(SpatialAttention, self).__init__(**kwargs)
+        # Initialize layers in __init__
+        self.conv1 = Conv2D(filters=1, kernel_size=2, padding='same', activation='sigmoid', name='conv1')
+        self.conv2 = Conv2D(filters=1, kernel_size=3, padding='same', activation='sigmoid', name='conv2')
+        self.conv3 = Conv2D(filters=1, kernel_size=5, padding='same', activation='sigmoid', name='conv3')
+
+        self.conv_pooling = None
+
+        self.concatenate = Concatenate(axis=-1)
+        self.batch_norm = BatchNormalization(name='batch_norm')
+        self.activation = Activation('mish', name='activation')  # 'mish' can be defined if not available in Keras
         self.use_skip_connection = use_skip_connection
 
     def build(self, input_shape):
@@ -31,29 +40,34 @@ class SpatialAttention(layers.Layer):
         Args:
             input_shape (tuple): Shape of the input tensor (batch_size, height, width, channels).
         """
-        # Initialize convolutional layers for attention weights
-        self.conv1 = Conv2D(filters=1, kernel_size=7, padding='same', activation='sigmoid', name='conv1')
-        self.conv2 = Conv2D(filters=1, kernel_size=7, padding='same', activation='sigmoid', name='conv2')
-        self.conv_pooling = Conv2D(filters=1, kernel_size=1, padding='same', activation='sigmoid', name='conv_pooling')
+        self.conv_pooling = Conv2D(filters=input_shape[-1], kernel_size=1, padding='same', activation='sigmoid',
+                                   name='conv_pooling')
 
-        # Initialize dense layer for final output
-        self.dense = Dense(input_shape[-1], activation='sigmoid', name='dense')
 
-        # Initialize batch normalization
-        self.batch_norm = BatchNormalization(name='batch_norm')
-
-        # Mish activation layer
-        self.activation = layers.Activation('mish', name='activation')
-
-        # Call build on all sublayers
         self.conv1.build(input_shape)
         self.conv2.build(input_shape)
-        self.conv_pooling.build(input_shape)
-        self.dense.build((None, input_shape[-1]))  # dense layer input shape is (None, channels)
-        self.batch_norm.build(input_shape)
+        self.conv3.build(input_shape)
 
-        # Set trainable weights for the layers
-        self.built = True
+        attention_map1_shape = self.conv1.compute_output_shape(input_shape)
+        attention_map2_shape = self.conv2.compute_output_shape(input_shape)
+        attention_map3_shape = self.conv3.compute_output_shape(input_shape)
+
+        self.concatenate.build([attention_map1_shape, attention_map2_shape, attention_map3_shape])
+
+
+        pooling_input_shape = self.concatenate.compute_output_shape([attention_map1_shape, attention_map2_shape, attention_map3_shape])
+
+        self.conv_pooling.build(pooling_input_shape)
+
+        pooling_output_shape = self.conv_pooling.compute_output_shape(pooling_input_shape)
+
+        self.batch_norm.build(pooling_output_shape)
+
+        self.activation.build(pooling_output_shape)
+
+        super(SpatialAttention, self).build(input_shape)
+
+        # Call the parent class's build method
 
     def call(self, inputs):
         """
@@ -65,29 +79,41 @@ class SpatialAttention(layers.Layer):
         Returns:
             tensor: The output tensor with spatial attention applied, with optional skip connection.
         """
-        # Compute attention maps using two convolutional operations
+        # Compute attention maps using convolutional operations
         attention_map1 = self.conv1(inputs)
         attention_map2 = self.conv2(inputs)
+        attention_map3 = self.conv3(inputs)
 
-        # Combine the attention maps
-        combined_attention = Activation('sigmoid')(attention_map1 + attention_map2)
+        # Concatenate the attention maps along the channel axis
+        x = self.concatenate([attention_map1, attention_map2, attention_map3])
 
-        # Apply pooling to the combined attention map
-        combined_attention = self.conv_pooling(combined_attention)
-
-        combined_attention = self.dense(combined_attention)
+        # Apply 1x1 convolution to reduce the concatenated maps to the same depth as inputs
+        x = self.conv_pooling(x)
 
         # Multiply the input with the combined attention weights
-        output = Multiply()([inputs, combined_attention])
+        x = Multiply()([inputs, x])
 
         # If skip connection is enabled, add the input to the output
         if self.use_skip_connection:
-            output = Add()([output, inputs])  # Skip connection
+            x = Add()([x, inputs])  # Skip connection
 
-        output = self.batch_norm(output)
-        output = self.activation(output)
+        # Apply batch normalization and activation
+        x = self.batch_norm(x)
+        output = self.activation(x)
 
         return output
+
+    def compute_output_shape(self, input_shape):
+        """
+        Computes the output shape of the layer.
+
+        Args:
+            input_shape (tuple): Shape of the input tensor.
+
+        Returns:
+            tuple: Output shape, which is the same as the input shape.
+        """
+        return input_shape
 
     def get_config(self):
         """
@@ -97,9 +123,7 @@ class SpatialAttention(layers.Layer):
             dict: Configuration dictionary containing layer parameters.
         """
         base_config = super(SpatialAttention, self).get_config()
-        config = {
-            'use_skip_connection': self.use_skip_connection,
-        }
+        config = {'use_skip_connection': self.use_skip_connection}
         return {**base_config, **config}
 
     @classmethod
@@ -111,6 +135,6 @@ class SpatialAttention(layers.Layer):
             config (dict): Configuration dictionary to recreate the layer.
 
         Returns:
-            CNNSpatialAttention: An instance of the CNNSpatialAttention layer.
+            SpatialAttention: An instance of the SpatialAttention layer.
         """
         return cls(**config)
