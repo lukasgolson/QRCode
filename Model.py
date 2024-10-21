@@ -1,9 +1,3 @@
-import math
-
-import keras
-import kerascv
-import numpy as np
-import tensorflow as tf
 from keras import layers, Model
 from keras.src.layers import MultiHeadAttention, Conv2D, Add
 from tensorflow.keras.layers import Dropout, BatchNormalization
@@ -56,11 +50,10 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
 
         x = Add()([x, residual])
 
-        x = BatchNormalization()(x)
         x = Mish()(x)
+        x = BatchNormalization()(x)
 
         x = SpatialAttention(use_skip_connection=True)(x)
-
 
         # Check if downscale_frequency is non-zero before the modulo operation
         if downscale_frequency > 0 and total_downscales > 0 and i % downscale_frequency == 0:
@@ -89,65 +82,56 @@ def create_dense_architecture(input_tensor, units=256, depth=3, dropout=0.2):
             x = layers.Add()([x, residual])  # Residual connection
 
         # Apply normalization and activation after the add operation
-        x = layers.BatchNormalization()(x)
         x = layers.Activation('mish')(x)  # 'mish' is applied here
+
+        x = layers.BatchNormalization()(x)
 
     return x
 
 
-def round_to_power_of_2(number, up=False):
-    """
-    Rounds a given number to the nearest power of 2.
+def create_attention_architecture(input_tensor, heads=8, depth=3, dropout=0.2):
+    x = input_tensor
 
-    Parameters:
-    number (float or int): The number to be rounded.
-    up (bool): If True, rounds up to the nearest power of 2; if False, rounds down.
+    for i in range(depth):
+        # Save the input to add as a residual if necessary
+        residual_1 = x
 
-    Returns:
-    float or int: The rounded number.
+        # Apply multi-head attention
+        x = MultiHeadAttention(num_heads=heads, key_dim=x.shape[-1])(x, x)
+        x = Dropout(dropout)(x)
 
-    Raises:
-    ValueError: If the number is less than or equal to zero.
-    """
-    if number <= 0:
-        raise ValueError("The number must be greater than zero.")
+        x = layers.Add()([x, residual_1])
+        x = layers.BatchNormalization()(x)
 
-    # Calculate the logarithm base 2
-    log2 = math.log2(number)
+        residual_2 = x
 
-    if up:
-        # Round up to the next power of 2
-        return 2 ** math.ceil(log2)
-    else:
-        # Round down to the previous power of 2
-        return 2 ** math.floor(log2)
+        x = layers.Dense(x.shape[-1], activation='mish')(x)
+        x = Dropout(dropout)(x)
+        x = layers.Dense(x.shape[-1])(x)
+
+        x = layers.Add()([x, residual_2])
+        x = layers.Activation('mish')(x)
+
+        x = layers.BatchNormalization()(x)
+
+    return x
 
 
 # The idea is to turn the image into a sequence of vectors that can be used to turn into text
-def create_encoder_architecture(input_tensor, max_sequence_length=512, char_count=128, dense_layers=3):
+def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
     x = layers.BatchNormalization()(input_tensor)
 
     x = layers.Conv2D(x.shape[-1], (1, 1), padding='same', activation='mish')(x)
 
-    x = layers.Flatten()(x)
-
-    # reshape into sequence of 512
-    x = layers.Reshape((max_sequence_length, -1))(x)
-
-    x = create_dense_architecture(x, units=256, depth=dense_layers)
+    x = layers.Reshape((x.shape[1] * x.shape[2], x.shape[3]))(x)
 
     x = PositionalEncoding()(x)
 
-    residual = x
+    x = layers.Conv1D(filters=feature_length, kernel_size=1, padding='valid')(x)
 
-    x = MultiHeadAttention(num_heads=8, key_dim=x.shape[-1])(x, x)
+    stride_length = x.shape[1] // max_sequence_length
 
-    x = layers.Add()([x, residual])
-
-    x = layers.BatchNormalization()(x)
-    x = layers.Activation('mish')(x)
-
-    x = layers.TimeDistributed(layers.Dense(char_count, activation='mish'))(x)
+    x = layers.Conv1D(filters=feature_length, kernel_size=stride_length, strides=stride_length, padding='valid')(x)
 
     return x
 
@@ -163,8 +147,13 @@ def create_model(input_shape, max_sequence_length, num_chars):
 
     x = create_cnn_architecture(attention, 4, 64, 64)
 
+    x = cnn_to_sequence(x, max_sequence_length, 256)
 
-    x = create_encoder_architecture(x, max_sequence_length, dense_layers=4)
+    x = create_attention_architecture(x, 8, 4)
+
+    x = create_dense_architecture(x, num_chars, 2, 0.2)
+
+    print(x.shape)
 
     outputs = layers.TimeDistributed(layers.Dense(num_chars, activation='softmax'))(x)
 
