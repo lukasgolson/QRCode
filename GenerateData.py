@@ -106,12 +106,31 @@ def generate_qr_code(i, repeats=3):
     return i
 
 
+def get_next_index():
+    """Find the next available index for QR code naming."""
+    existing_files = os.listdir('data/images')
+    existing_indices = []
+
+    for filename in existing_files:
+        # Check if the file name starts with QR and has the correct format
+        if filename.startswith("QR") and "_" in filename:
+            index_str = filename.split('_')[0][2:]  # Extract the index after 'QR'
+            if index_str.isdigit():
+                existing_indices.append(int(index_str))
+
+    # Return the next index
+    return max(existing_indices, default=-1) + 1
+
+
 if __name__ == '__main__':
     count = 64 // 4
-    random.seed("Lukas G. Olson")
 
-    # Using ThreadPoolExecutor for parallel processing
+
+    next_index = get_next_index()
+
+
+# Using ThreadPoolExecutor for parallel processing
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-        futures = [executor.submit(generate_qr_code, i, 3) for i in range(count)]
+        futures = [executor.submit(generate_qr_code, next_index + i, 3) for i in range(count)]
         for future in tqdm.tqdm(as_completed(futures), total=count, desc="Generating QR codes"):
             future.result()  # This will raise any exceptions that occurred during execution
