@@ -1,12 +1,11 @@
 import argparse
 import glob
 import os
-
 import numpy as np
 from PIL import Image
 from tensorflow.keras.models import load_model, Model
-
 from char_level_encoder import CharLevelEncoder
+from concurrent.futures import ThreadPoolExecutor
 
 
 # Function to load the latest model from the model directory
@@ -29,60 +28,53 @@ def preprocess_image(image_path, target_size):
     return img_array
 
 
-# Function to decode the predicted output to text
-def decode_prediction(prediction, encoder):
-    encoder.print_vocabulary()
-    return encoder.decode(prediction)
-
-
 # Ensure "images" directory exists
 def ensure_image_directory():
     if not os.path.exists('images'):
         os.makedirs('images')
 
 
-# Function to save each channel as a separate PNG
-def save_intermediate_output(output, layer_number, prefix="layer"):
+# Function to save a channel or 1D output as a PNG
+def save_channel_image(output_image, filename):
+    output_image = (output_image - output_image.min()) / (output_image.max() - output_image.min()) * 255.0
+    output_image = output_image.astype(np.uint8)
+    img = Image.fromarray(output_image)
+    img.save(filename)
+    print(f"Saved: {filename}")
+
+
+# Function to handle image saving in parallel
+def save_images_parallel(layer_number, output, prefix="layer"):
     ensure_image_directory()
 
-    if len(output.shape) == 4:  # (batch_size, width, height, channels)
-        width, height, channels = output.shape[1:4]
-        for ch in range(channels):
-            output_image = output[0, :, :, ch]
-            output_image = (output_image - output_image.min()) / (output_image.max() - output_image.min()) * 255.0
-            output_image = output_image.astype(np.uint8)
+    tasks = []
+    with ThreadPoolExecutor() as executor:
+        if len(output.shape) == 4:  # (batch_size, width, height, channels)
+            width, height, channels = output.shape[1:4]
+            for ch in range(channels):
+                output_image = output[0, :, :, ch]
+                filename = f"images/{prefix}_{layer_number}_c{ch+1}_output.png"
+                tasks.append(executor.submit(save_channel_image, output_image, filename))
 
-            filename = f"images/{prefix}_{layer_number}_c{ch+1}_output.png"
-            img = Image.fromarray(output_image)
-            img.save(filename)
-            print(f"Saved: {filename}")
+        elif len(output.shape) == 3:  # (batch_size, width, height)
+            output_image = output[0]
+            filename = f"images/{prefix}_{layer_number}_output.png"
+            tasks.append(executor.submit(save_channel_image, output_image, filename))
 
-    elif len(output.shape) == 3:  # (batch_size, width, height)
-        output_image = output[0]
-        output_image = (output_image - output_image.min()) / (output_image.max() - output_image.min()) * 255.0
-        output_image = output_image.astype(np.uint8)
+        elif len(output.shape) == 2:  # (batch_size, features)
+            output_image = output[0]#.reshape(1, -1)  # Reshape to (1, n) for horizontal image
+            filename = f"images/{prefix}_{layer_number}_output.png"
+            tasks.append(executor.submit(save_channel_image, output_image, filename))
 
-        filename = f"images/{prefix}_{layer_number}_output.png"
-        img = Image.fromarray(output_image)
-        img.save(filename)
-        print(f"Saved: {filename}")
-
-    elif len(output.shape) == 2:  # (batch_size, features)
-        output_image = output[0].reshape(1, -1)  # Reshape to (1, n) for horizontal image
-        output_image = (output_image - output_image.min()) / (output_image.max() - output_image.min()) * 255.0
-        output_image = output_image.astype(np.uint8)
-
-        filename = f"images/{prefix}_{layer_number}_output.png"
-        img = Image.fromarray(output_image)
-        img.save(filename)
-        print(f"Saved: {filename}")
+        # Wait for all tasks to finish
+        [task.result() for task in tasks]
 
 
-# Function to get output of a specific layer in the model
-def get_intermediate_output(model, image, layer_number):
-    intermediate_model = Model(inputs=model.input, outputs=model.layers[layer_number].output)
-    intermediate_output = intermediate_model.predict(image)
-    return intermediate_output
+# Function to extract activations for all layers at once
+def get_all_layer_outputs(model, image):
+    layer_outputs = [layer.output for layer in model.layers]  # Get output for each layer
+    multi_output_model = Model(inputs=model.input, outputs=layer_outputs)  # Create a new model with multiple outputs
+    return multi_output_model.predict(image)
 
 
 # Function to print the model's architecture with layer IDs
@@ -93,29 +85,20 @@ def print_model_layers(model):
         print(f"{idx:<10} {layer.name:<25} {layer.__class__.__name__:<20} {layer.output_shape}")
 
 
-# Function to save outputs of all layers in the model
-def save_all_layer_outputs(model, image):
-    ensure_image_directory()
-
-    for layer_number, layer in enumerate(model.layers):
-        intermediate_output = get_intermediate_output(model, image, layer_number)
-        print(f"Saving outputs for layer {layer_number} ({layer.name})...")
-        save_intermediate_output(intermediate_output, layer_number)
-
-
-# Main function to load image and run inference
+# Main function to load image, run inference and save intermediate outputs
 def run_inference(image_path, model, encoder, target_size, layer_number=None, save_output=False, output_all_layers=False):
     image = preprocess_image(image_path, target_size)
 
     if output_all_layers:
-        save_all_layer_outputs(model, image)
+        all_outputs = get_all_layer_outputs(model, image)  # Get all layer outputs in one pass
+        for layer_number, layer_output in enumerate(all_outputs):
+            print(f"Saving outputs for layer {layer_number}...")
+            save_images_parallel(layer_number, layer_output)
     elif layer_number is not None:
-        intermediate_output = get_intermediate_output(model, image, layer_number)
+        intermediate_output = get_all_layer_outputs(model, image)[layer_number]
         print(f"Intermediate output at layer {layer_number}:")
-        print(intermediate_output)
-
         if save_output:
-            save_intermediate_output(intermediate_output, layer_number)
+            save_images_parallel(layer_number, intermediate_output)
     else:
         prediction = model.predict(image)
         print("Model prediction output:", prediction)
@@ -158,8 +141,8 @@ if __name__ == "__main__":
 
         result = run_inference(args.image, model, encoder, 512, args.layer, args.save_output, args.output_all_layers)
 
-        if args.layer is None and not args.output_all_layers:
-            print(f"Predicted text content: {result}")
+        #if args.layer is None and not args.output_all_layers:
+        print(f"Predicted text content: {result}")
     else:
         if not args.print_model:
             print("No image path provided for inference and --print_model not used. Exiting.")
