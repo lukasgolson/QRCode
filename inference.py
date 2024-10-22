@@ -157,11 +157,10 @@ def run_inference(image_path, model, encoder, target_size, layer_number=None, sa
         print(f"Intermediate output at layer {layer_number}:")
         if save_output:
             save_images_parallel(layer_number, intermediate_output)
-    else:
-        prediction = model.predict(image)
-        print("Model prediction output:", prediction)
-        decoded_text = decode_prediction(prediction, encoder)
-        return decoded_text
+
+    prediction = model.predict(image)
+    decoded_text = encoder.decode(prediction)
+    return decoded_text
 
 
 if __name__ == "__main__":
