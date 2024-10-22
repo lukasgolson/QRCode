@@ -141,9 +141,9 @@ def create_model(input_shape, max_sequence_length, num_chars):
     inputs = layers.Input(shape=input_shape)
 
     # Instantiate the SpatialTransformerInputHead
-    processing_head = SpatialTransformerInputHead(downscaling=2)(inputs)  # Ensure the output is used correctly
+    #processing_head = SpatialTransformerInputHead(downscaling=2)(inputs)  # Ensure the output is used correctly
 
-    attention = SpatialAttention(use_skip_connection=True)(processing_head)
+    attention = SpatialAttention(use_skip_connection=True)(inputs)
 
     x = create_cnn_architecture(attention, 4, 64, 64)
 
