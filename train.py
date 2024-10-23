@@ -26,12 +26,38 @@ gpus = tf.config.list_physical_devices('GPU')
 print(f"GPUs: {gpus}")
 
 
+
+def masked_categorical_crossentropy(y_true, y_pred):
+    """
+    Compute masked categorical crossentropy loss.
+
+    :param y_true: Ground truth labels (one-hot encoded).
+    :param y_pred: Predicted labels (output from the model).
+    :return: Mean masked categorical crossentropy loss.
+    """
+    # Calculate categorical crossentropy
+    loss = tf.keras.losses.categorical_crossentropy(y_true, y_pred, from_logits=False)
+
+    # Create a mask to ignore fully 0 timesteps based on y_true
+    # A timestep is considered valid if there's any non-zero value in that timestep
+    mask = tf.reduce_sum(y_true, axis=-1) > 0  # Creates a boolean mask for valid timesteps
+
+    # Convert mask to float (1 for valid, 0 for padded)
+    mask = tf.cast(mask, tf.float32)
+
+    # Apply the mask: multiply loss by the mask
+    masked_loss = loss * mask
+
+    # Return the mean loss, considering only valid timesteps
+    return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask)
+
+
 def get_compiled_model(max_sequence_length=512, num_chars=128, target_image_size=512, gradient_accumulation_steps=1):
     input_shape = (target_image_size, target_image_size, 1)  # Define the input shape for the images
 
     model = create_model(input_shape, max_sequence_length, num_chars)
     model.compile(optimizer=keras.optimizers.AdamW(gradient_accumulation_steps=gradient_accumulation_steps),
-                  loss='categorical_crossentropy', metrics=['accuracy'])
+                  loss=masked_categorical_crossentropy, metrics=['precision'])
     return model
 
 

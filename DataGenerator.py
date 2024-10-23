@@ -88,8 +88,14 @@ class QRDataGenerator(tf.keras.utils.Sequence):
 
             y.append(one_hot_encoded)
 
+
+
+
+
+
         X = np.array(X)
         y = np.array(y)
+
 
        # print(y)
 
