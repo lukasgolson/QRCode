@@ -1,8 +1,13 @@
+import numpy as np
 from keras import layers, Model
-from keras.src.layers import MultiHeadAttention, Conv2D, Add
-from tensorflow.keras.layers import Dropout, BatchNormalization
+from keras.src.initializers import Constant
+from keras.src.layers import MultiHeadAttention, Conv2D, Add, Conv3D, Conv1D
+from tensorflow.keras.layers import Dropout, BatchNormalization, Dense
+from tensorflow.python.keras.layers.pooling import MaxPool2D
+from tensorflow.python.keras.regularizers import l2
 
 from layers.Activations import Mish
+from layers.BilinearInterpolation import BilinearInterpolation
 from layers.PositionalEncoding import PositionalEncoding
 from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformerInputHead
@@ -65,7 +70,7 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
     return x
 
 
-def create_dense_architecture(input_tensor, units=256, depth=3, dropout=0.2):
+def create_dense_architecture(input_tensor, units=512, depth=3, dropout=0.1):
     x = input_tensor
 
     # Build the model using the same number of units for each layer
@@ -89,7 +94,7 @@ def create_dense_architecture(input_tensor, units=256, depth=3, dropout=0.2):
     return x
 
 
-def create_attention_architecture(input_tensor, heads=8, depth=3, dropout=0.2):
+def create_attention_architecture(input_tensor, heads=8, depth=3, dropout=0.1):
     x = input_tensor
 
     for i in range(depth):
@@ -117,44 +122,101 @@ def create_attention_architecture(input_tensor, heads=8, depth=3, dropout=0.2):
     return x
 
 
-# The idea is to turn the image into a sequence of vectors that can be used to turn into text
+# The idea is to turn individual pixels into a sequence of embeddings
 def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
     x = layers.BatchNormalization()(input_tensor)
+
+    # eventually we might want to change this to patch extraction
 
     x = layers.Conv2D(x.shape[-1], (1, 1), padding='same', activation='mish')(x)
 
     x = layers.Reshape((x.shape[1] * x.shape[2], x.shape[3]))(x)
 
-    x = PositionalEncoding()(x)
-
     x = layers.Conv1D(filters=feature_length, kernel_size=1, padding='valid')(x)
 
-    stride_length = x.shape[1] // max_sequence_length
+    # Get initial input length
 
-    x = layers.Conv1D(filters=feature_length, kernel_size=stride_length, strides=stride_length, padding='valid')(x)
+    input_length = x.shape[1]
+    # start at 4096
+
+    while input_length > max_sequence_length:
+        # Apply Conv1D with calculated strides and kernel size
+        x = layers.Conv1D(filters=feature_length, kernel_size=2,
+                          strides=2, padding='valid')(x)
+
+        input_length = x.shape[1]
+
+
+
+    x = layers.TimeDistributed(layers.Dense(feature_length * 2, activation="mish"))(x)
+    x = layers.TimeDistributed(layers.Dense(feature_length, activation="mish"))(x)
+
+    x = PositionalEncoding()(x)
 
     return x
+
+
+def create_input_head(inputs, out_shape=(256, 256)):
+    def get_initial_transform_weights(output_size):
+        b = np.zeros((2, 3), dtype='float32')
+        b[0, 0] = 1
+        b[1, 1] = 1
+        w = np.zeros((output_size, 6), dtype='float32')
+        return Constant(w), Constant(b.flatten())
+
+    image = inputs
+    x = layers.MaxPool2D(pool_size=(2, 2))(image)
+    x = layers.Conv2D(20, (5, 5), padding='same')(x)
+    x = layers.MaxPool2D(pool_size=(2, 2))(x)
+    x = layers.Conv2D(20, (5, 5), padding='same')(x)
+    x = layers.Flatten()(x)
+    x = layers.Dense(50)(x)
+    x = layers.Activation('relu')(x)
+
+    # Use the weights from the get_initial_transform_weights
+    kernel_initializer, bias_initializer = get_initial_transform_weights(50)
+    x = layers.Dense(6, kernel_initializer=kernel_initializer, bias_initializer=bias_initializer)(x)
+
+    # Ensure BilinearInterpolation is defined or imported correctly
+    interpolated_input = BilinearInterpolation(out_shape)([image, x])
+
+    return interpolated_input
 
 
 def create_model(input_shape, max_sequence_length, num_chars):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    # Instantiate the SpatialTransformerInputHead
-    #processing_head = SpatialTransformerInputHead(downscaling=2)(inputs)  # Ensure the output is used correctly
+    x = create_input_head(inputs)
 
-    attention = SpatialAttention(use_skip_connection=True)(inputs)
+    x = SpatialAttention(use_skip_connection=True)(x)
 
-    x = create_cnn_architecture(attention, 4, 64, 64)
+    x = create_cnn_architecture(x, 4, 64, 64)
 
     x = cnn_to_sequence(x, max_sequence_length, 256)
 
-    x = create_attention_architecture(x, 8, 4)
+    x = create_attention_architecture(x, 8, 6)
 
-    x = create_dense_architecture(x, num_chars, 2, 0.2)
+    x = create_dense_architecture(x, num_chars, 2, 0.1)
 
     print(x.shape)
 
     outputs = layers.TimeDistributed(layers.Dense(num_chars, activation='softmax'))(x)
 
-    return Model(inputs, outputs, name='qr_model')
+    model = Model(inputs, outputs, name='qr_model')
+
+    l2_value = 0.001
+    for layer in model.layers:
+        if isinstance(layer, Dense):
+            layer.kernel_regularizer = l2(l2_value)
+        if isinstance(layer, Conv1D):
+            layer.kernel_regularizer = l2(l2_value)
+        if isinstance(layer, Conv2D):
+            layer.kernel_regularizer = l2(l2_value)
+        if isinstance(layer, Conv3D):
+            layer.kernel_regularizer = l2(l2_value)
+        if isinstance(layer, MultiHeadAttention):
+            layer.kernel_regularizer = l2(l2_value)
+
+
+    return model

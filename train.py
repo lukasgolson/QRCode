@@ -8,6 +8,8 @@ from tensorflow.keras.callbacks import TensorBoard
 from DataGenerator import QRDataGenerator
 from Model import create_model
 
+
+
 # Paths to directories
 image_dir = 'data/images'
 content_dir = 'data/contents'
@@ -25,7 +27,7 @@ if not os.path.exists(checkpoint_dir):
 gpus = tf.config.list_physical_devices('GPU')
 print(f"GPUs: {gpus}")
 
-
+@keras.saving.register_keras_serializable()
 def masked_categorical_crossentropy(y_true, y_pred):
     """
     Compute masked categorical crossentropy loss.
@@ -55,8 +57,11 @@ def get_compiled_model(max_sequence_length=512, num_chars=128, target_image_size
     input_shape = (target_image_size, target_image_size, 1)  # Define the input shape for the images
 
     model = create_model(input_shape, max_sequence_length, num_chars)
-    model.compile(optimizer=keras.optimizers.AdamW(gradient_accumulation_steps=gradient_accumulation_steps),
-                  loss=masked_categorical_crossentropy, metrics=['accuracy', 'F1Score'])
+
+    optimizer = keras.optimizers.AdamW(gradient_accumulation_steps=gradient_accumulation_steps, learning_rate=0.001)
+
+    model.compile(optimizer=optimizer,
+                  loss=masked_categorical_crossentropy, metrics=['accuracy', 'precision', 'recall'])
     return model
 
 
@@ -86,13 +91,10 @@ def run_training(epochs=1, batch_size=16, gradient_accumulation_steps=None):
     tf.keras.backend.clear_session()
 
 
-
-
     os.makedirs("logs/fit/", exist_ok=True)
     log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     callbacks = [
-
         TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=True, update_freq=500),
         keras.callbacks.ModelCheckpoint(
             filepath=checkpoint_dir + "/ckpt-{epoch}.keras", save_freq="epoch"
@@ -126,3 +128,5 @@ def run_training(epochs=1, batch_size=16, gradient_accumulation_steps=None):
 if __name__ == "__main__":
     run_training(epochs=8, batch_size=24, gradient_accumulation_steps=None)
     print("Training complete.")
+
+#%%

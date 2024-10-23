@@ -39,7 +39,7 @@ class CharLevelEncoder:
 
         # ensure that the vocab size is at least num_chars minus 1
         while len(printable_chars) < 128 - 1:
-            printable_chars.append(f"UNK_{len(printable_chars)}")
+            printable_chars.append(f"<BUF_{len(printable_chars)}>")
 
 
         # Add special tokens
