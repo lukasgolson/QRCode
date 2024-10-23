@@ -37,10 +37,13 @@ class CharLevelEncoder:
 
         printable_chars = list(printable_chars)
 
+        # ensure that the vocab size is at least num_chars minus 1
+        while len(printable_chars) < 128 - 1:
+            printable_chars.append(f"UNK_{len(printable_chars)}")
+
 
         # Add special tokens
         printable_chars.append(eos_char)  # Add EOS character
-        printable_chars.append('<PAD>')    # Add padding character if needed
 
         return printable_chars
 

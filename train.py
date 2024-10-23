@@ -26,7 +26,6 @@ gpus = tf.config.list_physical_devices('GPU')
 print(f"GPUs: {gpus}")
 
 
-
 def masked_categorical_crossentropy(y_true, y_pred):
     """
     Compute masked categorical crossentropy loss.
@@ -57,7 +56,7 @@ def get_compiled_model(max_sequence_length=512, num_chars=128, target_image_size
 
     model = create_model(input_shape, max_sequence_length, num_chars)
     model.compile(optimizer=keras.optimizers.AdamW(gradient_accumulation_steps=gradient_accumulation_steps),
-                  loss=masked_categorical_crossentropy, metrics=['precision'])
+                  loss=masked_categorical_crossentropy, metrics=['accuracy', 'F1Score'])
     return model
 
 
@@ -79,11 +78,15 @@ def run_training(epochs=1, batch_size=16, gradient_accumulation_steps=None):
     num_chars = 128
     target_image_size = 512
 
-    strategy = tf.distribute.MirroredStrategy()
-
     keras.mixed_precision.set_global_policy("mixed_float16")
 
+
+    strategy = tf.distribute.MirroredStrategy()
+
     tf.keras.backend.clear_session()
+
+
+
 
     os.makedirs("logs/fit/", exist_ok=True)
     log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -121,5 +124,5 @@ def run_training(epochs=1, batch_size=16, gradient_accumulation_steps=None):
 
 
 if __name__ == "__main__":
-    run_training(epochs=8, batch_size=8, gradient_accumulation_steps=None)
+    run_training(epochs=8, batch_size=24, gradient_accumulation_steps=None)
     print("Training complete.")
