@@ -21,7 +21,9 @@ class SpatialTransformer(Layer):
             Conv2D(8, (1, 1), strides=(2, 2), activation='relu', padding='valid'),
             Flatten(),
             Dense(50, activation='relu'),
-            Dense(6, activation='sigmoid')  # Predict 6 parameters for affine transformation
+            Dense(6, activation='linear', kernel_initializer='zeros',
+                  bias_initializer=tf.constant_initializer([1, 0, 0, 0, 1, 0]))
+            # Identity transformation initialization
         ])
 
         self.localization_network.build(input_shape)
@@ -62,11 +64,11 @@ class SpatialTransformer(Layer):
         # Stack grids to create the full grid
         grid = tf.stack([x_grid, y_grid], axis=-1)  # Shape: (1, height, width, 2)
 
-        print(f"Initial grid shape: {grid.shape}")  # Should be (1, height, width, 2)
+       # print(f"Initial grid shape: {grid.shape}")  # Should be (1, height, width, 2)
 
         grid = tf.reshape(grid, (1, height * width, 2))  # Shape: (1, height * width, 2)
 
-        print(f"Reshaped grid shape: {grid.shape}")  # Should be (1, height * width, 2)
+       # print(f"Reshaped grid shape: {grid.shape}")  # Should be (1, height * width, 2)
 
         batch_size = tf.shape(theta)[0]  # Determine the batch size from theta
 
@@ -74,26 +76,22 @@ class SpatialTransformer(Layer):
 
         theta = tf.reshape(theta, (batch_size, 2, 3))  # Shape: (batch_size, 2, 3)
 
-
-        print(f"grid rep: {grid.shape}, theta: {theta.shape}")
+       # print(f"grid rep: {grid.shape}, theta: {theta.shape}")
 
         affine_matrix = theta[:, :, :2]  # Shape: (batch_size, 2, 2)
         translation = theta[:, :, 2]  # Shape: (batch_size, 2)
 
         transformed_grid = tf.linalg.matmul(grid, affine_matrix)  # Resulting shape: (batch_size, height * width, 2)
 
-        print(f"Transformed grid shape: {transformed_grid.shape}")  # Should be (batch_size, height * width, 2)
-
+     #   print(f"Transformed grid shape: {transformed_grid.shape}")  # Should be (batch_size, height * width, 2)
 
         transformed_grid = transformed_grid + translation[:, None, :]  # Broadcast translation to all grid points
 
-
-        print(f"Transformed grid shape (2): {transformed_grid.shape}")  # Should be (batch_size, height * width, 2)
-
+      #  print(f"Transformed grid shape (2): {transformed_grid.shape}")  # Should be (batch_size, height * width, 2)
 
         reshaped = tf.reshape(transformed_grid, (batch_size, height, width, 2))
 
-        print(f"Reshaped transformed grid shape: {reshaped.shape}")  # Should be (batch_size, height, width, 2)
+     #   print(f"Reshaped transformed grid shape: {reshaped.shape}")  # Should be (batch_size, height, width, 2)
 
         return reshaped
 
