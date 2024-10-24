@@ -54,16 +54,17 @@ class SpatialAttention(keras.layers.Layer):
 
         self.concatenate.build([attention_map1_shape, attention_map2_shape, attention_map3_shape])
 
+        concatenate_shape = self.concatenate.compute_output_shape([attention_map1_shape, attention_map2_shape, attention_map3_shape])
 
-        pooling_input_shape = self.concatenate.compute_output_shape([attention_map1_shape, attention_map2_shape, attention_map3_shape])
+        self.conv_pooling.build(concatenate_shape)
 
-        self.conv_pooling.build(pooling_input_shape)
+        conv_pooling_shape = self.conv_pooling.compute_output_shape(concatenate_shape)
 
-        pooling_output_shape = self.conv_pooling.compute_output_shape(pooling_input_shape)
+        self.batch_norm.build(conv_pooling_shape)
 
-        self.batch_norm.build(pooling_output_shape)
+        batch_norm_shape = self.batch_norm.compute_output_shape(conv_pooling_shape)
 
-        self.activation.build(pooling_output_shape)
+        self.activation.build(batch_norm_shape)
 
         super(SpatialAttention, self).build(input_shape)
 
@@ -103,17 +104,7 @@ class SpatialAttention(keras.layers.Layer):
 
         return output
 
-    def compute_output_shape(self, input_shape):
-        """
-        Computes the output shape of the layer.
 
-        Args:
-            input_shape (tuple): Shape of the input tensor.
-
-        Returns:
-            tuple: Output shape, which is the same as the input shape.
-        """
-        return input_shape
 
     def get_config(self):
         """

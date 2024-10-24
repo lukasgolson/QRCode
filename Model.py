@@ -1,16 +1,12 @@
 import numpy as np
 from keras import layers, Model
-from keras.src.initializers import Constant
 from keras.src.layers import MultiHeadAttention, Conv2D, Add, Conv3D, Conv1D
 from tensorflow.keras.layers import Dropout, BatchNormalization, Dense
-from tensorflow.python.keras.layers.pooling import MaxPool2D
-from tensorflow.python.keras.regularizers import l2
 
 from layers.Activations import Mish
-from layers.BilinearInterpolation import BilinearInterpolation
 from layers.PositionalEncoding import PositionalEncoding
 from layers.SpatialAttention import SpatialAttention
-from layers.SpatialTransformer import SpatialTransformerInputHead
+from layers.SpatialTransformer import SpatialTransformer
 
 
 def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channels=64):
@@ -146,8 +142,6 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
 
         input_length = x.shape[1]
 
-
-
     x = layers.TimeDistributed(layers.Dense(feature_length * 2, activation="mish"))(x)
     x = layers.TimeDistributed(layers.Dense(feature_length, activation="mish"))(x)
 
@@ -156,38 +150,12 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
     return x
 
 
-def create_input_head(inputs, out_shape=(256, 256)):
-    def get_initial_transform_weights(output_size):
-        b = np.zeros((2, 3), dtype='float32')
-        b[0, 0] = 1
-        b[1, 1] = 1
-        w = np.zeros((output_size, 6), dtype='float32')
-        return Constant(w), Constant(b.flatten())
-
-    image = inputs
-    x = layers.MaxPool2D(pool_size=(2, 2))(image)
-    x = layers.Conv2D(20, (5, 5), padding='same')(x)
-    x = layers.MaxPool2D(pool_size=(2, 2))(x)
-    x = layers.Conv2D(20, (5, 5), padding='same')(x)
-    x = layers.Flatten()(x)
-    x = layers.Dense(50)(x)
-    x = layers.Activation('relu')(x)
-
-    # Use the weights from the get_initial_transform_weights
-    kernel_initializer, bias_initializer = get_initial_transform_weights(50)
-    x = layers.Dense(6, kernel_initializer=kernel_initializer, bias_initializer=bias_initializer)(x)
-
-    # Ensure BilinearInterpolation is defined or imported correctly
-    interpolated_input = BilinearInterpolation(out_shape)([image, x])
-
-    return interpolated_input
-
 
 def create_model(input_shape, max_sequence_length, num_chars):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    x = create_input_head(inputs)
+    x = SpatialTransformer()(inputs)
 
     x = SpatialAttention(use_skip_connection=True)(x)
 
@@ -204,19 +172,5 @@ def create_model(input_shape, max_sequence_length, num_chars):
     outputs = layers.TimeDistributed(layers.Dense(num_chars, activation='softmax'))(x)
 
     model = Model(inputs, outputs, name='qr_model')
-
-    l2_value = 0.001
-    for layer in model.layers:
-        if isinstance(layer, Dense):
-            layer.kernel_regularizer = l2(l2_value)
-        if isinstance(layer, Conv1D):
-            layer.kernel_regularizer = l2(l2_value)
-        if isinstance(layer, Conv2D):
-            layer.kernel_regularizer = l2(l2_value)
-        if isinstance(layer, Conv3D):
-            layer.kernel_regularizer = l2(l2_value)
-        if isinstance(layer, MultiHeadAttention):
-            layer.kernel_regularizer = l2(l2_value)
-
 
     return model

@@ -10,7 +10,7 @@ from char_level_encoder import CharLevelEncoder
 
 class QRDataGenerator(tf.keras.utils.Sequence):
     def __init__(self, image_dir, content_dir, batch_size=32, num_chars=128, target_size=(256, 256),
-                 max_sequence_length=512, shuffle=True, **kwargs):
+                 max_sequence_length=512, shuffle=False, **kwargs):
         self.image_dir = image_dir
         self.content_dir = content_dir
         self.batch_size = batch_size
@@ -45,20 +45,22 @@ class QRDataGenerator(tf.keras.utils.Sequence):
         return int(np.floor(len(self.valid_image_files) / self.batch_size))
 
     def __getitem__(self, index):
-        # Calculate the start and end index for the batch
-        start_index = (index * self.batch_size) % len(self.valid_image_files)
-        end_index = start_index + self.batch_size
-
-        # Adjust the end index if it exceeds the number of valid files
-        if end_index > len(self.valid_image_files):
-            end_index = len(self.valid_image_files)
+        # Calculate the start index for the batch
+        start_index = index * self.batch_size
 
         # Get the current batch of valid files
-        batch_x = self.valid_image_files[start_index:end_index]
+        batch_x = self.valid_image_files[start_index:start_index + self.batch_size]
 
-        # If batch_x is less than batch_size, fill it from the beginning
+        # If the current batch is empty (e.g., when index exceeds the number of batches),
+        # we need to wrap around to ensure we always return a batch
         if len(batch_x) < self.batch_size:
-            batch_x += self.valid_image_files[:self.batch_size - len(batch_x)]
+            # If the end of valid files is reached, wrap around to the beginning
+            # Fill the remaining items from the start of the valid files
+            remaining_count = self.batch_size - len(batch_x)
+            batch_x += self.valid_image_files[:remaining_count]
+
+        # Ensure that we always return a batch of the specified batch_size
+        assert len(batch_x) == self.batch_size, "Batch size does not match expected size."
 
         # Generate data for the current batch
         X, y = self.__data_generation(batch_x)
@@ -88,18 +90,9 @@ class QRDataGenerator(tf.keras.utils.Sequence):
 
             y.append(one_hot_encoded)
 
-
-
-
-
-
         X = np.array(X)
         y = np.array(y)
 
-
-       # print(y)
-
-        # y = y.reshape(X.shape[0], self.max_sequence_length, self.num_chars)
 
         return X, y
 
