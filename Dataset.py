@@ -48,7 +48,7 @@ def create_dataset(image_dir, content_dir, target_size, batch_size=32, shuffle=T
     )
 
     if shuffle:
-        dataset = dataset.shuffle(buffer_size=1000)
+        dataset = dataset.shuffle(buffer_size=250)
 
     dataset = dataset.batch(batch_size)
     dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)

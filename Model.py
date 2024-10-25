@@ -161,7 +161,7 @@ def create_model(input_shape, max_sequence_length, num_chars):
 
     x = cnn_to_sequence(x, max_sequence_length, 128)
 
-    x = create_attention_architecture(x, 6, 6)
+    x = create_attention_architecture(x, 8, 4)
 
     x = create_dense_architecture(x, num_chars, 1, 0.1)
 

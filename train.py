@@ -123,7 +123,8 @@ def create_lr_scheduler(initial_lr, max_lr, min_lr, warmup_epochs, period_epochs
     return keras.callbacks.LearningRateScheduler(lr_scheduler)
 
 
-def run_training(epochs=1, batch_size=16, gradient_accumulation_steps=None):
+def run_training(epochs=12, warming_epochs=6, steps_per_epoch=1000, periods=6, batch_size=16,
+                 gradient_accumulation_steps=None):
     max_sequence_length = 512
     num_chars = 128
     target_image_size = 512
@@ -137,7 +138,7 @@ def run_training(epochs=1, batch_size=16, gradient_accumulation_steps=None):
     os.makedirs("logs/fit/", exist_ok=True)
     log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    learning_scheduler = create_lr_scheduler(0.001, 0.01, 0.0001, 2, 3)
+    learning_scheduler = create_lr_scheduler(0.001, 0.01, 0.0001, warming_epochs, period_epochs=int(epochs // periods))
 
     callbacks = [
         TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=True, update_freq=500),
@@ -162,6 +163,10 @@ def run_training(epochs=1, batch_size=16, gradient_accumulation_steps=None):
     os.makedirs(save_path, exist_ok=True)  # Create the directory if it does not exist
     date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
+    max_steps_per_epoch = dataset.samples // dataset.batch_size
+
+    steps_per_epoch = min(steps_per_epoch, max_steps_per_epoch)  # Limit steps per epoch to 1000
+
     with strategy.scope():
         model = make_or_restore_model(max_sequence_length, num_chars, target_image_size, gradient_accumulation_steps,
                                       compile=False)
@@ -172,17 +177,18 @@ def run_training(epochs=1, batch_size=16, gradient_accumulation_steps=None):
 
         freeze_layer(model, 'spatial_transformer', frozen=True, recompile=True)
 
-        model.fit(dataset, epochs=2, callbacks=callbacks)
+        model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=warming_epochs, callbacks=callbacks)
 
         freeze_layer(model, 'spatial_transformer', frozen=False, recompile=True)
 
-        model.fit(dataset, epochs=epochs - 2, callbacks=callbacks, initial_epoch=2)
+        model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=epochs - warming_epochs, callbacks=callbacks,
+                  initial_epoch=warming_epochs)
 
     model.save(os.path.join(save_path, f'qr_model_{date}.keras'))
 
 
 if __name__ == "__main__":
-    run_training(epochs=6, batch_size=32, gradient_accumulation_steps=None)
+    run_training(epochs=24, batch_size=16, gradient_accumulation_steps=None)
     print("Training complete.")
 
 # %%
