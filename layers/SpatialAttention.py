@@ -43,7 +43,6 @@ class SpatialAttention(keras.layers.Layer):
         self.conv_pooling = Conv2D(filters=input_shape[-1], kernel_size=1, padding='same', activation='sigmoid',
                                    name='conv_pooling')
 
-
         self.conv1.build(input_shape)
         self.conv2.build(input_shape)
         self.conv3.build(input_shape)
@@ -54,7 +53,8 @@ class SpatialAttention(keras.layers.Layer):
 
         self.concatenate.build([attention_map1_shape, attention_map2_shape, attention_map3_shape])
 
-        concatenate_shape = self.concatenate.compute_output_shape([attention_map1_shape, attention_map2_shape, attention_map3_shape])
+        concatenate_shape = self.concatenate.compute_output_shape(
+            [attention_map1_shape, attention_map2_shape, attention_map3_shape])
 
         self.conv_pooling.build(concatenate_shape)
 
@@ -98,13 +98,11 @@ class SpatialAttention(keras.layers.Layer):
         if self.use_skip_connection:
             x = Add()([x, inputs])  # Skip connection
 
-        # Apply batch normalization and activation
-        x = self.batch_norm(x)
-        output = self.activation(x)
+            # Apply batch normalization and activation
+            x = self.batch_norm(x)
+            x = self.activation(x)
 
-        return output
-
-
+        return x
 
     def get_config(self):
         """

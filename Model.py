@@ -7,9 +7,11 @@ from layers.Activations import Mish
 from layers.PositionalEncoding import PositionalEncoding
 from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
+from layers.SqueezeExcitation import SqueezeExcitation
 
 
-def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channels=64):
+def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channels=64, attention_frequency=2,
+                            use_residual=True):
     x = input_tensor
     current_height = input_tensor.shape[1]  # Current height of the input image
     current_width = input_tensor.shape[2]  # Current width of the input image
@@ -33,28 +35,28 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
     current_width = input_tensor.shape[2]
 
     for i in range(length):
-        print(f"CNN layer {i}")
+        if i % attention_frequency == 0:
+            x = SqueezeExcitation()(x)
+            x = SpatialAttention(use_skip_connection=True)(x)
 
         # Calculate the current number of channels
         current_channels = min(current_channels * (2 ** i), max_channels)
 
-        # Save the input for the residual connection
         residual = x
 
         # Convolution to adjust the number of channels
         x = Conv2D(current_channels, (3, 3), padding='same', activation='mish')(x)
-        x = Conv2D(current_channels, (3, 3), padding='same', activation='mish')(x)
 
-        # Ensure the residual has the same number of channels
-        if residual.shape[-1] != x.shape[-1]:
-            residual = Conv2D(x.shape[-1], (1, 1))(residual)
+        if use_residual:
+            # Ensure the residual has the same number of channels
+            if residual.shape[-1] != x.shape[-1]:
+                residual = Conv2D(x.shape[-1], (1, 1))(residual)
 
-        x = Add()([x, residual])
+            x = Add()([x, residual])
 
-        x = Mish()(x)
-        x = BatchNormalization()(x)
+            x = Mish()(x)
+            x = BatchNormalization()(x)
 
-        x = SpatialAttention(use_skip_connection=True)(x)
 
         # Check if downscale_frequency is non-zero before the modulo operation
         if downscale_frequency > 0 and total_downscales > 0 and i % downscale_frequency == 0:
@@ -150,14 +152,13 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
     return x
 
 
-
 def create_model(input_shape, max_sequence_length, num_chars):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    x = SpatialTransformer()(inputs)
+    spatial_transformer = SpatialTransformer()(inputs)
 
-    x = SpatialAttention(use_skip_connection=True)(x)
+    x = SpatialAttention(use_skip_connection=True)(spatial_transformer)
 
     x = create_cnn_architecture(x, 4, 64, 64)
 
