@@ -163,10 +163,6 @@ def run_training(epochs=12, warming_epochs=6, steps_per_epoch=1000, periods=6, b
     os.makedirs(save_path, exist_ok=True)  # Create the directory if it does not exist
     date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    max_steps_per_epoch = dataset.samples // dataset.batch_size
-
-    steps_per_epoch = min(steps_per_epoch, max_steps_per_epoch)  # Limit steps per epoch to 1000
-
     with strategy.scope():
         model = make_or_restore_model(max_sequence_length, num_chars, target_image_size, gradient_accumulation_steps,
                                       compile=False)
