@@ -57,7 +57,6 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
             x = Mish()(x)
             x = BatchNormalization()(x)
 
-
         # Check if downscale_frequency is non-zero before the modulo operation
         if downscale_frequency > 0 and total_downscales > 0 and i % downscale_frequency == 0:
             if current_height > min_resolution and current_width > min_resolution:
@@ -158,17 +157,13 @@ def create_model(input_shape, max_sequence_length, num_chars):
 
     spatial_transformer = SpatialTransformer()(inputs)
 
-    x = SpatialAttention(use_skip_connection=True)(spatial_transformer)
+    x = create_cnn_architecture(spatial_transformer, 4, 64, 64)
 
-    x = create_cnn_architecture(x, 4, 64, 64)
+    x = cnn_to_sequence(x, max_sequence_length, 128)
 
-    x = cnn_to_sequence(x, max_sequence_length, 256)
+    x = create_attention_architecture(x, 6, 6)
 
-    x = create_attention_architecture(x, 8, 6)
-
-    x = create_dense_architecture(x, num_chars, 2, 0.1)
-
-    print(x.shape)
+    x = create_dense_architecture(x, num_chars, 1, 0.1)
 
     outputs = layers.TimeDistributed(layers.Dense(num_chars, activation='softmax'))(x)
 

@@ -9,6 +9,7 @@ from keras.src.layers import layer
 from tensorflow.keras.callbacks import TensorBoard
 
 from DataGenerator import QRDataGenerator
+from Dataset import create_dataset
 from Model import create_model
 
 # Paths to directories
@@ -146,9 +147,13 @@ def run_training(epochs=1, batch_size=16, gradient_accumulation_steps=None):
         learning_scheduler
     ]
 
-    qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size,
-                                  max_sequence_length=max_sequence_length, num_chars=num_chars,
-                                  target_size=(target_image_size, target_image_size))
+    # qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size,
+    #       max_sequence_length=max_sequence_length, num_chars=num_chars,
+    #           target_size=(target_image_size, target_image_size), fraction_of_data=0.25)
+
+    dataset = create_dataset(image_dir=image_dir, content_dir=content_dir,
+                             target_size=(target_image_size, target_image_size),
+                             batch_size=batch_size, shuffle=True, max_seq_len=max_sequence_length, num_chars=num_chars)
 
     print("Created data generator")
 
@@ -158,7 +163,8 @@ def run_training(epochs=1, batch_size=16, gradient_accumulation_steps=None):
     date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     with strategy.scope():
-        model = make_or_restore_model(max_sequence_length, num_chars, target_image_size, gradient_accumulation_steps, compile=False)
+        model = make_or_restore_model(max_sequence_length, num_chars, target_image_size, gradient_accumulation_steps,
+                                      compile=False)
         model.summary()
         # keras.utils.plot_model(model, to_file='model.png', show_shapes=True, show_layer_names=True, expand_nested=True, show_trainable=True, show_layer_activations=True, dpi=800)
 
@@ -166,17 +172,17 @@ def run_training(epochs=1, batch_size=16, gradient_accumulation_steps=None):
 
         freeze_layer(model, 'spatial_transformer', frozen=True, recompile=True)
 
-        model.fit(qr_data_gen, epochs=2, callbacks=callbacks)
+        model.fit(dataset, epochs=2, callbacks=callbacks)
 
         freeze_layer(model, 'spatial_transformer', frozen=False, recompile=True)
 
-        model.fit(qr_data_gen, epochs=epochs - 2, callbacks=callbacks, initial_epoch=2)
+        model.fit(dataset, epochs=epochs - 2, callbacks=callbacks, initial_epoch=2)
 
     model.save(os.path.join(save_path, f'qr_model_{date}.keras'))
 
 
 if __name__ == "__main__":
-    run_training(epochs=6, batch_size=24, gradient_accumulation_steps=None)
+    run_training(epochs=6, batch_size=32, gradient_accumulation_steps=None)
     print("Training complete.")
 
 # %%
