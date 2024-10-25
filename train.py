@@ -55,27 +55,38 @@ def masked_categorical_crossentropy(y_true, y_pred):
     return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask)
 
 
-def freeze_layer(model, layer, frozen=True):
+def freeze_layer(model, layer_name, frozen=True, recompile=True):
     """Freeze or unfreeze the specified layer."""
+
+    model_layer = model.get_layer(layer_name)
+
     layer.trainable = frozen
-    model.compile(optimizer=model.optimizer, loss=model.loss, metrics=model.metrics)
-    print(f'Layer "{layer.name}" is {"frozen" if frozen else "unfrozen"}.')
+
+    if recompile:
+        compile_model(model)
+
+    print(f'Layer "{model_layer.name}" is {"frozen" if frozen else "unfrozen"}.')
 
 
-def get_compiled_model(max_sequence_length=512, num_chars=128, target_image_size=512, gradient_accumulation_steps=1):
+def get_model(max_sequence_length=512, num_chars=128, target_image_size=512):
     input_shape = (target_image_size, target_image_size, 1)  # Define the input shape for the images
 
     model = create_model(input_shape, max_sequence_length, num_chars)
 
+    return model
+
+
+def compile_model(model):
     optimizer = tf.keras.optimizers.AdamW()
 
     model.compile(optimizer=optimizer, loss=masked_categorical_crossentropy,
                   metrics=['accuracy', 'precision', 'recall'])
+
     return model
 
 
 def make_or_restore_model(max_sequence_length=512, num_chars=128, target_image_size=512, gradient_accumulation_steps=1,
-                          frozen=False):
+                          compile=True):
     # Either restore the latest model, or create a fresh one
     # if there is no checkpoint available.
 
@@ -83,9 +94,15 @@ def make_or_restore_model(max_sequence_length=512, num_chars=128, target_image_s
     if checkpoints:
         latest_checkpoint = max(checkpoints, key=os.path.getctime)
         print("Restoring from", latest_checkpoint)
-        return keras.models.load_model(latest_checkpoint)
-    print("Creating a new model")
-    return get_compiled_model(max_sequence_length, num_chars, target_image_size, gradient_accumulation_steps)
+        model = keras.models.load_model(latest_checkpoint, compile=False)
+    else:
+        print("Creating a new model")
+        model = get_model(max_sequence_length, num_chars, target_image_size)
+
+    if compile:
+        return compile_model(model)
+
+    return model
 
 
 def create_lr_scheduler(initial_lr, max_lr, min_lr, warmup_epochs, period_epochs):
@@ -141,17 +158,17 @@ def run_training(epochs=1, batch_size=16, gradient_accumulation_steps=None):
     date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     with strategy.scope():
-        model = make_or_restore_model(max_sequence_length, num_chars, target_image_size, gradient_accumulation_steps)
+        model = make_or_restore_model(max_sequence_length, num_chars, target_image_size, gradient_accumulation_steps, compile=False)
         model.summary()
         # keras.utils.plot_model(model, to_file='model.png', show_shapes=True, show_layer_names=True, expand_nested=True, show_trainable=True, show_layer_activations=True, dpi=800)
 
         model.save(os.path.join(save_path, f'qr_model_empty_{date}.keras'))
 
-        freeze_layer(model, model.get_layer('spatial_transformer'), frozen=True)
+        freeze_layer(model, 'spatial_transformer', frozen=True, recompile=True)
 
         model.fit(qr_data_gen, epochs=2, callbacks=callbacks)
 
-        freeze_layer(model, model.get_layer('spatial_transformer'), frozen=False)
+        freeze_layer(model, 'spatial_transformer', frozen=False, recompile=True)
 
         model.fit(qr_data_gen, epochs=epochs - 2, callbacks=callbacks, initial_epoch=2)
 
