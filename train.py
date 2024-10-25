@@ -59,7 +59,6 @@ def freeze_layer(model, layer, frozen=True):
     """Freeze or unfreeze the specified layer."""
     layer.trainable = frozen
     model.compile(optimizer=model.optimizer, loss=model.loss, metrics=model.metrics)
-    model.make_train_function()
     print(f'Layer "{layer.name}" is {"frozen" if frozen else "unfrozen"}.')
 
 
