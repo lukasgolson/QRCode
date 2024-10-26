@@ -141,7 +141,7 @@ def run_training(epochs=12, warming_epochs=6, steps_per_epoch=1000, periods=6, b
     learning_scheduler = create_lr_scheduler(0.001, 0.01, 0.0001, warming_epochs, period_epochs=int(epochs // periods))
 
     callbacks = [
-        TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=True, update_freq=500),
+        TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=False, update_freq=500),
         keras.callbacks.ModelCheckpoint(
             filepath=checkpoint_dir + "/ckpt-{epoch}.keras", save_freq="epoch"
         ),
