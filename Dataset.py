@@ -8,6 +8,10 @@ from char_level_encoder import CharLevelEncoder
 
 def preprocess_image(image_path, target_size):
     # Load the image and preprocess it
+
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"Image file not found: {image_path}")
+
     img = Image.open(image_path).convert('L')
     img = img.resize(target_size)
     img = np.array(img).reshape(target_size + (1,)) / 255.0  # Normalize
@@ -50,7 +54,7 @@ def create_dataset(image_dir, content_dir, target_size, batch_size=32, shuffle=T
     if shuffle:
         dataset = dataset.shuffle(buffer_size=250)
 
-    dataset = dataset.batch(batch_size)
+    dataset = dataset.batch(batch_size, drop_remainder=True)
     dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
     return dataset

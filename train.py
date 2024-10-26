@@ -184,7 +184,7 @@ def run_training(epochs=12, warming_epochs=6, steps_per_epoch=1000, periods=6, b
 
 
 if __name__ == "__main__":
-    run_training(epochs=24, batch_size=16, gradient_accumulation_steps=None)
+    run_training(epochs=24, batch_size=16, gradient_accumulation_steps=None, steps_per_epoch=500)
     print("Training complete.")
 
 # %%
