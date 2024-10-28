@@ -160,8 +160,7 @@ def run_training(epochs=24, warming_epochs=6, headless_epochs=12, periods=6, bat
         learning_scheduler
     ]
 
-    dataset = create_dataset(image_dir=image_dir, content_dir=content_dir,
-                             target_size=(target_image_size, target_image_size),
+    dataset = create_dataset(target_size=(target_image_size, target_image_size),
                              batch_size=batch_size, shuffle=True, max_seq_len=max_sequence_length, num_chars=num_chars)
 
     print("Created data generator")
