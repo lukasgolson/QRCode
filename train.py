@@ -123,11 +123,22 @@ def create_lr_scheduler(initial_lr, max_lr, min_lr, warmup_epochs, period_epochs
     return keras.callbacks.LearningRateScheduler(lr_scheduler)
 
 
-def run_training(epochs=12, warming_epochs=6, steps_per_epoch=1000, periods=6, batch_size=16,
+def run_training(epochs=24, warming_epochs=6, headless_epochs=12, periods=6, batch_size=16,
+                 total_items_per_epoch=16 * 500,
                  gradient_accumulation_steps=None):
     max_sequence_length = 512
     num_chars = 128
     target_image_size = 512
+
+    steps_per_epoch = total_items_per_epoch // batch_size
+
+    assert epochs > 0, "The number of epochs should be greater than 0."
+
+    assert epochs > warming_epochs + headless_epochs, "The number of epochs should be greater than the sum of warming and headless epochs."
+
+    assert periods > 0, "The number of periods should be greater than 0."
+
+    assert epochs % periods == 0, "The number of epochs should be divisible by the number of periods."
 
     keras.mixed_precision.set_global_policy("mixed_float16")
 
@@ -138,7 +149,8 @@ def run_training(epochs=12, warming_epochs=6, steps_per_epoch=1000, periods=6, b
     os.makedirs("logs/fit/", exist_ok=True)
     log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    learning_scheduler = create_lr_scheduler(0.001, 0.01, 0.0001, warming_epochs, period_epochs=int(epochs // periods))
+    learning_scheduler = create_lr_scheduler(0.0001, 0.001, 0.0001, warming_epochs,
+                                             period_epochs=int(epochs // periods))
 
     callbacks = [
         TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=False, update_freq=500),
@@ -147,10 +159,6 @@ def run_training(epochs=12, warming_epochs=6, steps_per_epoch=1000, periods=6, b
         ),
         learning_scheduler
     ]
-
-    # qr_data_gen = QRDataGenerator(image_dir, content_dir, batch_size=batch_size,
-    #       max_sequence_length=max_sequence_length, num_chars=num_chars,
-    #           target_size=(target_image_size, target_image_size), fraction_of_data=0.25)
 
     dataset = create_dataset(image_dir=image_dir, content_dir=content_dir,
                              target_size=(target_image_size, target_image_size),
@@ -167,24 +175,28 @@ def run_training(epochs=12, warming_epochs=6, steps_per_epoch=1000, periods=6, b
         model = make_or_restore_model(max_sequence_length, num_chars, target_image_size, gradient_accumulation_steps,
                                       compile=False)
         model.summary()
-        # keras.utils.plot_model(model, to_file='model.png', show_shapes=True, show_layer_names=True, expand_nested=True, show_trainable=True, show_layer_activations=True, dpi=800)
 
         model.save(os.path.join(save_path, f'qr_model_empty_{date}.keras'))
 
         freeze_layer(model, 'spatial_transformer', frozen=True, recompile=True)
 
-        model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=warming_epochs, callbacks=callbacks)
+        model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=warming_epochs + headless_epochs,
+                  callbacks=callbacks)
 
         freeze_layer(model, 'spatial_transformer', frozen=False, recompile=True)
 
-        model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=epochs - warming_epochs, callbacks=callbacks,
+        model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=epochs - warming_epochs - headless_epochs,
+                  callbacks=callbacks,
                   initial_epoch=warming_epochs)
 
     model.save(os.path.join(save_path, f'qr_model_{date}.keras'))
 
 
 if __name__ == "__main__":
-    run_training(epochs=24, batch_size=16, gradient_accumulation_steps=None, steps_per_epoch=500)
+    epochs = 48
+    batch_size = 16
+    run_training(epochs=epochs, periods=epochs // 8, batch_size=batch_size, gradient_accumulation_steps=None,
+                 total_items_per_epoch=batch_size * 500)
     print("Training complete.")
 
 # %%

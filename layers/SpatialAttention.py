@@ -22,9 +22,9 @@ class SpatialAttention(keras.layers.Layer):
         """
         super(SpatialAttention, self).__init__(**kwargs)
         # Initialize layers in __init__
-        self.conv1 = Conv2D(filters=1, kernel_size=2, padding='same', activation='sigmoid', name='conv1')
-        self.conv2 = Conv2D(filters=1, kernel_size=3, padding='same', activation='sigmoid', name='conv2')
-        self.conv3 = Conv2D(filters=1, kernel_size=5, padding='same', activation='sigmoid', name='conv3')
+        self.conv1 = Conv2D(filters=1, kernel_size=2, padding='same', activation='mish', name='conv1', kernel_initializer="he_normal")
+        self.conv2 = Conv2D(filters=1, kernel_size=3, padding='same', activation='mish', name='conv2', kernel_initializer="he_normal")
+        self.conv3 = Conv2D(filters=1, kernel_size=5, padding='same', activation='mish', name='conv3', kernel_initializer="he_normal")
 
         self.conv_pooling = None
 

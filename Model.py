@@ -45,7 +45,7 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
         residual = x
 
         # Convolution to adjust the number of channels
-        x = Conv2D(current_channels, (3, 3), padding='same', activation='mish')(x)
+        x = Conv2D(current_channels, (3, 3), padding='same', activation='mish', kernel_initializer="he_normal")(x)
 
         if use_residual:
             # Ensure the residual has the same number of channels
@@ -76,7 +76,7 @@ def create_dense_architecture(input_tensor, units=512, depth=3, dropout=0.1):
         residual = x
 
         # Apply dense layer with a constant number of units
-        x = layers.Dense(units, activation='mish')(x)
+        x = layers.Dense(units, activation='mish', kernel_initializer="he_normal")(x)
         x = Dropout(dropout)(x)
 
         # Add residual connection after the first layer
@@ -107,7 +107,7 @@ def create_attention_architecture(input_tensor, heads=8, depth=3, dropout=0.1):
 
         residual_2 = x
 
-        x = layers.Dense(x.shape[-1], activation='mish')(x)
+        x = layers.Dense(x.shape[-1], activation='mish', kernel_initializer="he_normal")(x)
         x = Dropout(dropout)(x)
         x = layers.Dense(x.shape[-1])(x)
 
@@ -125,11 +125,11 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
 
     # eventually we might want to change this to patch extraction
 
-    x = layers.Conv2D(x.shape[-1], (1, 1), padding='same', activation='mish')(x)
+    x = layers.Conv2D(x.shape[-1], (1, 1), padding='same', activation='mish', kernel_initializer="he_normal")(x)
 
     x = layers.Reshape((x.shape[1] * x.shape[2], x.shape[3]))(x)
 
-    x = layers.Conv1D(filters=feature_length, kernel_size=1, padding='valid')(x)
+    x = layers.Conv1D(filters=feature_length, kernel_size=1, padding='valid', activation='mish', kernel_initializer="he_normal")(x)
 
     # Get initial input length
 
@@ -143,8 +143,8 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
 
         input_length = x.shape[1]
 
-    x = layers.TimeDistributed(layers.Dense(feature_length * 2, activation="mish"))(x)
-    x = layers.TimeDistributed(layers.Dense(feature_length, activation="mish"))(x)
+    x = layers.TimeDistributed(layers.Dense(feature_length * 2, activation="mish", kernel_initializer="he_normal"))(x)
+    x = layers.TimeDistributed(layers.Dense(feature_length, activation="mish", kernel_initializer="he_normal"))(x)
 
     x = PositionalEncoding()(x)
 
