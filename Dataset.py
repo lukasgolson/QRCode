@@ -7,7 +7,6 @@ from PIL import Image
 from char_level_encoder import CharLevelEncoder  # Ensure this is correctly imported
 
 
-
 # Functions for generating QR codes
 def create_qr_code(content, error_correction=qrcode.constants.ERROR_CORRECT_L, resolution=512, max_shift=30,
                    max_rotation=60, noise_range=(1, 75)):
@@ -60,6 +59,10 @@ def apply_random_image_rotation(image, max_angle=360):
 
 
 def generate_random_data(population=None, max_length=300):
+
+    if max_length == 0:
+        return ''
+
     if population is None:
         population = string.ascii_uppercase + string.digits
     length = random.randint(1, max_length)
@@ -67,7 +70,7 @@ def generate_random_data(population=None, max_length=300):
     return content
 
 
-def generate_qr_code(i, repeats=3):
+def generate_qr_code(repeats=3):
     """Generate a QR code and return its index for reference."""
     max_length = random.choice(
         [random.randint(0, 25), random.randint(26, 100), random.randint(101, 250), random.randint(251, 500)]
@@ -75,9 +78,7 @@ def generate_qr_code(i, repeats=3):
 
     population = random.choice([string.ascii_uppercase, string.digits, string.ascii_uppercase + string.digits])
 
-
     content = generate_random_data(population, max_length)
-
 
     # Generate a clean QR code
     clean_qr_img = create_qr_code(content, noise_range=(0, 0), max_shift=0, max_rotation=0)
@@ -88,41 +89,35 @@ def generate_qr_code(i, repeats=3):
     return content, clean_qr_img, dirty_qr_imgs
 
 
-def load_qr_code_data(count=64, encoder=None):
+def normalize_image(image, target_size=(512, 512)):
+    return np.array(image.convert('L')).reshape((target_size[0], target_size[1], 1)) / 255.0
+
+
+def load_qr_code_data(target_size, encoder=None):
     """Infinite generator to create QR codes in memory without saving."""
-    for i in range(count):
-        content, clean, dirty = generate_qr_code(i)  # Generate QR codes in memory
+    while True:
+        content, clean, dirty = generate_qr_code()  # Generate QR codes in memory
 
         # Encode the content before yielding
         encoded_content = encoder.encode(content)
 
         # Yield clean QR code and encoded content
-        yield clean, encoded_content
+        yield normalize_image(clean, target_size), encoded_content
 
         for dirty_img in dirty:
             # Yield each dirty QR code and the same encoded content
-            yield dirty_img, encoded_content
+            yield normalize_image(dirty_img, target_size), encoded_content
 
 
-
-def create_dataset(count=64, target_size=(512, 512), batch_size=32, shuffle=True, max_seq_len=512, num_chars=128):
+def create_dataset(target_size=(512, 512), batch_size=32, shuffle=True, max_seq_len=512, num_chars=128):
     encoder = CharLevelEncoder(max_sequence_length=max_seq_len, num_chars=num_chars)  # Initialize encoder
     dataset = tf.data.Dataset.from_generator(
-        lambda: load_qr_code_data(count, encoder=encoder),  # Pass encoder
+        lambda: load_qr_code_data(target_size, encoder=encoder),  # Pass encoder
         output_signature=(
             tf.TensorSpec(shape=(target_size[0], target_size[1], 1), dtype=tf.float32),
             tf.TensorSpec(shape=(max_seq_len, num_chars), dtype=tf.float32)
         )
     )
-
-    def process_qr_data(qr_img, content):
-        # Convert the QR image to an array and normalize it
-        img_array = np.array(qr_img.convert('L')).reshape(target_size + (1,)) / 255.0  # Normalize
-        return img_array, content  # Return normalized image and encoded content
-
-
-    dataset = dataset.map(
-        lambda img, content: tf.numpy_function(process_qr_data, [img, content], [tf.float32, tf.float32]))
 
     if shuffle:
         dataset = dataset.shuffle(buffer_size=250)
@@ -133,7 +128,6 @@ def create_dataset(count=64, target_size=(512, 512), batch_size=32, shuffle=True
     return dataset
 
 
-
 if __name__ == '__main__':
     target_size = (512, 512)  # Example target size for images
     dataset = create_dataset(target_size=target_size, batch_size=32)
@@ -141,3 +135,4 @@ if __name__ == '__main__':
     for images, contents in dataset.take(1):  # Take one batch for example
         print("Images shape:", images.shape)
         print("Contents shape:", contents.shape)
+        break
