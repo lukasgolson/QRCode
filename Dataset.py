@@ -116,9 +116,10 @@ def create_dataset(count=64, target_size=(512, 512), batch_size=32, shuffle=True
     )
 
     def process_qr_data(qr_img, content):
-        # Convert the QR image to array and normalize it
+        # Convert the QR image to an array and normalize it
         img_array = np.array(qr_img.convert('L')).reshape(target_size + (1,)) / 255.0  # Normalize
         return img_array, content  # Return normalized image and encoded content
+
 
     dataset = dataset.map(
         lambda img, content: tf.numpy_function(process_qr_data, [img, content], [tf.float32, tf.float32]))
