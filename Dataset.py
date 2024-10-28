@@ -103,10 +103,10 @@ def load_qr_code_data():
             yield dirty_img, content
 
 
-def create_dataset(target_size=(512, 512), batch_size=32, shuffle=True, max_seq_len=512, num_chars=128):
+def create_dataset(count=64, target_size=(512, 512), batch_size=32, shuffle=True, max_seq_len=512, num_chars=128):
     encoder = CharLevelEncoder(max_sequence_length=max_seq_len, num_chars=num_chars)  # Initialize encoder
     dataset = tf.data.Dataset.from_generator(
-        load_qr_code_data,
+        lambda: load_qr_code_data(count, encoder=encoder),  # Pass encoder
         output_signature=(
             tf.TensorSpec(shape=(target_size[0], target_size[1], 1), dtype=tf.float32),
             tf.TensorSpec(shape=(max_seq_len, num_chars), dtype=tf.float32)
@@ -116,21 +116,19 @@ def create_dataset(target_size=(512, 512), batch_size=32, shuffle=True, max_seq_
     def process_qr_data(qr_img, content):
         # Convert the QR image to array and normalize it
         img_array = np.array(qr_img.convert('L')).reshape(target_size + (1,)) / 255.0  # Normalize
-
-        # encode the content
-        encoded_content = encoder.encode(content)  # Encode content
-        return img_array, encoded_content
+        return img_array, content  # Return normalized image and encoded content
 
     dataset = dataset.map(
         lambda img, content: tf.numpy_function(process_qr_data, [img, content], [tf.float32, tf.float32]))
 
     if shuffle:
-        dataset = dataset.shuffle(buffer_size=40)
+        dataset = dataset.shuffle(buffer_size=250)
 
     dataset = dataset.batch(batch_size, drop_remainder=True)
     dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
     return dataset
+
 
 
 if __name__ == '__main__':
