@@ -88,19 +88,21 @@ def generate_qr_code(i, repeats=3):
     return content, clean_qr_img, dirty_qr_imgs
 
 
-def load_qr_code_data():
+def load_qr_code_data(count=64, encoder=None):
     """Infinite generator to create QR codes in memory without saving."""
-    i = 0  # Initialize counter
-    while True:
-        i += 1  # Increment counter
+    for i in range(count):
+        content, clean, dirty = generate_qr_code(i)  # Generate QR codes in memory
 
-        if i > 10000:
-            i = 0  # reset counter after 10000 images to prevent int overflow
+        # Encode the content before yielding
+        encoded_content = encoder.encode(content)
 
-        content, clean, dirty = generate_qr_code(i, repeats=3)  # Generate QR codes in memory
-        yield clean, content
+        # Yield clean QR code and encoded content
+        yield clean, encoded_content
+
         for dirty_img in dirty:
-            yield dirty_img, content
+            # Yield each dirty QR code and the same encoded content
+            yield dirty_img, encoded_content
+
 
 
 def create_dataset(count=64, target_size=(512, 512), batch_size=32, shuffle=True, max_seq_len=512, num_chars=128):
