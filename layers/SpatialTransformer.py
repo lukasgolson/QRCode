@@ -106,8 +106,11 @@ class SpatialTransformer(Layer):
         y = grid[:, :, :, 1]
 
         # Scale grid from [-1, 1] to image coordinates
-        x = 0.5 * tf.cast((x + 1.0) * width - 1, self.compute_dtype)
-        y = 0.5 * tf.cast((y + 1.0) * height - 1, self.compute_dtype)
+
+        base_term = tf.cast(0.5, self.compute_dtype)
+
+        x = base_term* tf.cast((x + 1.0) * width - 1, self.compute_dtype)
+        y = base_term * tf.cast((y + 1.0) * height - 1, self.compute_dtype)
 
         # Get the corner pixel values around the transformed coordinates
         x0 = tf.floor(x)
