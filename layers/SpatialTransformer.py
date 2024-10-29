@@ -40,7 +40,7 @@ class SpatialTransformer(Layer):
         # Predict transformation parameters using the localization network
         theta = self.localization_network(x)  # Should have shape (batch_size, 6)
 
-        theta = tf.cast(theta, self.dtype)  # Cast to the same dtype as the input
+        theta = tf.cast(theta, self.input_dtype)  # Cast to the same dtype as the input
 
         # Generate a grid of coordinates
         grid = self._generate_grid(theta, self.input_shape[0:3])  # Get height and width from input shape
@@ -67,17 +67,13 @@ class SpatialTransformer(Layer):
         # Stack grids to create the full grid
         grid = tf.stack([x_grid, y_grid], axis=-1)  # Shape: (1, height, width, 2)
 
-        # print(f"Initial grid shape: {grid.shape}")  # Should be (1, height, width, 2)
-
         grid = tf.reshape(grid, (1, height * width, 2))  # Shape: (1, height * width, 2)
-
-        # print(f"Reshaped grid shape: {grid.shape}")  # Should be (1, height * width, 2)
 
         batch_size = tf.shape(theta)[0]  # Determine the batch size from theta
 
         grid = tf.tile(grid, [batch_size, 1, 1])  # Shape: (batch_size, height * width, 2)
 
-        grid = tf.cast(grid, self.dtype)  # Cast to the same dtype as theta
+        grid = tf.cast(grid, self.input_dtype)  # Cast to the same dtype as the input
 
         theta = tf.reshape(theta, (batch_size, 2, 3))  # Shape: (batch_size, 2, 3)
 
