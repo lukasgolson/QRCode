@@ -82,7 +82,7 @@ def compile_model(model):
     optimizer = tf.keras.optimizers.Adafactor()
 
     model.compile(optimizer=optimizer, loss=masked_categorical_crossentropy,
-                  metrics=['accuracy', 'precision', 'recall'], jit_compile=True)
+                  metrics=['accuracy', 'precision', 'recall'])
 
     return model
 
