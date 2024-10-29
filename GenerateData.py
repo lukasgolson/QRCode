@@ -108,6 +108,10 @@ def generate_qr_code(i, repeats=3):
 
 def get_next_index():
     """Find the next available index for QR code naming."""
+
+    if not os.path.exists('data/images'):
+        return 0
+
     existing_files = os.listdir('data/images')
     existing_indices = []
 
