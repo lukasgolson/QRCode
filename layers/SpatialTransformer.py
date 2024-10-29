@@ -37,12 +37,9 @@ class SpatialTransformer(Layer):
         # Reduce channels by taking the average across the channel dimension
         x = tf.reduce_mean(x, axis=-1, keepdims=True)  # Shape: (batch_size, height, width)
 
-        x = tf.cast(x, self.compute_dtype)  # Cast to the same dtype as the input
-
         # Predict transformation parameters using the localization network
         theta = self.localization_network(x)  # Should have shape (batch_size, 6)
-
-        theta = tf.cast(theta, self.compute_dtype)  # Cast to the same dtype as the input
+        theta = tf.cast(theta, self.compute_dtype)
 
         # Generate a grid of coordinates
         grid = self._generate_grid(theta, self.input_shape[0:3])  # Get height and width from input shape
@@ -57,9 +54,9 @@ class SpatialTransformer(Layer):
         batch_size, height, width = output_size
 
         # Create normalized grid
-        x_grid = tf.tile(tf.range(0, width, dtype=tf.float32)[None, None, :],
+        x_grid = tf.tile(tf.range(0, width, dtype=self.compute_dtype)[None, None, :],
                          (1, height, 1))  # Shape: (1, height, width)
-        y_grid = tf.tile(tf.range(0, height, dtype=tf.float32)[None, :, None],
+        y_grid = tf.tile(tf.range(0, height, dtype=self.compute_dtype)[None, :, None],
                          (1, 1, width))  # Shape: (1, height, width)
 
         # Normalize the grid to the range [-1, 1]
@@ -74,8 +71,6 @@ class SpatialTransformer(Layer):
         batch_size = tf.shape(theta)[0]  # Determine the batch size from theta
 
         grid = tf.tile(grid, [batch_size, 1, 1])  # Shape: (batch_size, height * width, 2)
-
-        grid = tf.cast(grid, self.compute_dtype)  # Cast to the same dtype as the input
 
         theta = tf.reshape(theta, (batch_size, 2, 3))  # Shape: (batch_size, 2, 3)
 
@@ -109,8 +104,8 @@ class SpatialTransformer(Layer):
         y = grid[:, :, :, 1]
 
         # Scale grid from [-1, 1] to image coordinates
-        x = 0.5 * (tf.cast((x + 1.0) * width - 1, self.compute_dtype))
-        y = 0.5 * (tf.cast((y + 1.0) * height - 1, self.compute_dtype))
+        x = 0.5 * tf.cast((x + 1.0) * width - 1, self.compute_dtype)
+        y = 0.5 * tf.cast((y + 1.0) * height - 1, self.compute_dtype)
 
         # Get the corner pixel values around the transformed coordinates
         x0 = tf.floor(x)
@@ -118,10 +113,10 @@ class SpatialTransformer(Layer):
         y0 = tf.floor(y)
         y1 = y0 + 1
 
-        x0 = tf.clip_by_value(x0, 0, tf.cast(width - 1, tf.float32))
-        x1 = tf.clip_by_value(x1, 0, tf.cast(width - 1, tf.float32))
-        y0 = tf.clip_by_value(y0, 0, tf.cast(height - 1, tf.float32))
-        y1 = tf.clip_by_value(y1, 0, tf.cast(height - 1, tf.float32))
+        x0 = tf.clip_by_value(x0, 0, tf.cast(width - 1, self.compute_dtype))
+        x1 = tf.clip_by_value(x1, 0, tf.cast(width - 1, self.compute_dtype))
+        y0 = tf.clip_by_value(y0, 0, tf.cast(height - 1, self.compute_dtype))
+        y1 = tf.clip_by_value(y1, 0, tf.cast(height - 1, self.compute_dtype))
 
         # Interpolation weights
         wa = (x1 - x) * (y1 - y)
