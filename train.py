@@ -78,10 +78,11 @@ def get_model(max_sequence_length=512, num_chars=128, target_image_size=512):
 
 
 def compile_model(model):
-    optimizer = tf.keras.optimizers.AdamW()
+    # optimizer = tf.keras.optimizers.AdamW()
+    optimizer = tf.keras.optimizers.Adafactor()
 
     model.compile(optimizer=optimizer, loss=masked_categorical_crossentropy,
-                  metrics=['accuracy', 'precision', 'recall'])
+                  metrics=['accuracy', 'precision', 'recall'], jit_compile=True)
 
     return model
 
@@ -123,8 +124,7 @@ def create_lr_scheduler(initial_lr, max_lr, min_lr, warmup_epochs, period_epochs
     return keras.callbacks.LearningRateScheduler(lr_scheduler)
 
 
-def run_training(epochs=24, warming_epochs=6, headless_epochs=12, periods=6, batch_size=16,
-                 total_items_per_epoch=16 * 500,
+def run_training(epochs=24, headless_epochs=6, batch_size=16,  total_items_per_epoch=16 * 500,
                  gradient_accumulation_steps=None):
     max_sequence_length = 512
     num_chars = 128
@@ -134,13 +134,9 @@ def run_training(epochs=24, warming_epochs=6, headless_epochs=12, periods=6, bat
 
     assert epochs > 0, "The number of epochs should be greater than 0."
 
-    assert epochs > warming_epochs + headless_epochs, "The number of epochs should be greater than the sum of warming and headless epochs."
+    assert epochs >= headless_epochs, "The number of epochs should be greater than or equal to the headless epochs."
 
-    assert periods > 0, "The number of periods should be greater than 0."
-
-    assert epochs % periods == 0, "The number of epochs should be divisible by the number of periods."
-
-    keras.mixed_precision.set_global_policy("mixed_float16")
+    # keras.mixed_precision.set_global_policy("mixed_float16")
 
     strategy = tf.distribute.MirroredStrategy()
 
@@ -149,19 +145,18 @@ def run_training(epochs=24, warming_epochs=6, headless_epochs=12, periods=6, bat
     os.makedirs("logs/fit/", exist_ok=True)
     log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    learning_scheduler = create_lr_scheduler(0.0001, 0.001, 0.0001, warming_epochs,
-                                             period_epochs=int(epochs // periods))
+    # learning_scheduler = create_lr_scheduler(0.0001, 0.001, 0.0001, warming_epochs,
+    #                                           period_epochs=int(epochs // periods))
 
     callbacks = [
         TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=False, update_freq=500),
         keras.callbacks.ModelCheckpoint(
             filepath=checkpoint_dir + "/ckpt-{epoch}.keras", save_freq="epoch"
-        ),
-        learning_scheduler
+        )
     ]
 
     dataset = create_dataset(target_size=(target_image_size, target_image_size),
-                             batch_size=batch_size, shuffle=True, max_seq_len=max_sequence_length, num_chars=num_chars)
+                             batch_size=batch_size, shuffle=False, max_seq_len=max_sequence_length, num_chars=num_chars)
 
     print("Created data generator")
 
@@ -179,14 +174,14 @@ def run_training(epochs=24, warming_epochs=6, headless_epochs=12, periods=6, bat
 
         freeze_layer(model, 'spatial_transformer', frozen=True, recompile=True)
 
-        model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=warming_epochs + headless_epochs,
+        model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=headless_epochs,
                   callbacks=callbacks)
 
         freeze_layer(model, 'spatial_transformer', frozen=False, recompile=True)
 
-        model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=epochs - warming_epochs - headless_epochs,
+        model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
                   callbacks=callbacks,
-                  initial_epoch=warming_epochs)
+                  initial_epoch=headless_epochs)
 
     model.save(os.path.join(save_path, f'qr_model_{date}.keras'))
 

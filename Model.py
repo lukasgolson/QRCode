@@ -44,7 +44,6 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
 
         residual = x
 
-        # Convolution to adjust the number of channels
         x = Conv2D(current_channels, (3, 3), padding='same', activation='mish', kernel_initializer="he_normal")(x)
 
         if use_residual:
@@ -91,7 +90,7 @@ def create_dense_architecture(input_tensor, units=512, depth=3, dropout=0.1):
     return x
 
 
-def create_attention_architecture(input_tensor, heads=8, depth=3, dropout=0.1):
+def create_attention_module(input_tensor, heads=8, depth=1, dropout=0.1):
     x = input_tensor
 
     for i in range(depth):
@@ -129,22 +128,12 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
 
     x = layers.Reshape((x.shape[1] * x.shape[2], x.shape[3]))(x)
 
-    x = layers.Conv1D(filters=feature_length, kernel_size=1, padding='valid', activation='mish', kernel_initializer="he_normal")(x)
+    x = layers.Conv1D(filters=feature_length, kernel_size=1, padding='valid', activation='mish',
+                      kernel_initializer="he_normal")(x)
 
     # Get initial input length
 
-    input_length = x.shape[1]
-    # start at 4096
-
-    while input_length > max_sequence_length:
-        # Apply Conv1D with calculated strides and kernel size
-        x = layers.Conv1D(filters=feature_length, kernel_size=2,
-                          strides=2, padding='valid')(x)
-
-        input_length = x.shape[1]
-
     x = layers.TimeDistributed(layers.Dense(feature_length * 2, activation="mish", kernel_initializer="he_normal"))(x)
-    x = layers.TimeDistributed(layers.Dense(feature_length, activation="mish", kernel_initializer="he_normal"))(x)
 
     x = PositionalEncoding()(x)
 
@@ -157,11 +146,22 @@ def create_model(input_shape, max_sequence_length, num_chars):
 
     spatial_transformer = SpatialTransformer()(inputs)
 
-    x = create_cnn_architecture(spatial_transformer, 4, 64, 64)
+    x = create_cnn_architecture(spatial_transformer, 4, 128, 64)
 
     x = cnn_to_sequence(x, max_sequence_length, 128)
 
-    x = create_attention_architecture(x, 8, 4)
+    input_length = x.shape[1]
+    # start at 4096
+
+    while input_length > max_sequence_length:
+        x = create_attention_module(x, 8, 1)
+        #      # Apply Conv1D with calculated strides and kernel size
+        x = layers.Conv1D(filters=num_chars, kernel_size=2,
+                          strides=2, padding='valid')(x)
+
+        input_length = x.shape[1]
+
+    x = create_attention_module(x, 8, 4)
 
     x = create_dense_architecture(x, num_chars, 1, 0.1)
 

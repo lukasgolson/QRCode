@@ -123,7 +123,7 @@ def create_dataset(target_size=(512, 512), batch_size=32, shuffle=True, max_seq_
         dataset = dataset.shuffle(buffer_size=250)
 
     dataset = dataset.batch(batch_size, drop_remainder=True)
-    dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
 
     return dataset
 
