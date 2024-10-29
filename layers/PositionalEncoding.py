@@ -21,7 +21,8 @@ class PositionalEncoding(keras.layers.Layer):
 
         # Initialize the positional encoding
 
-        dtype = self.dtype or 'float32'  # Use 'float32' as a default if not specified
+        # get dtype from layer input
+        dtype = self.dtype
 
 
         # get the dtype of the input tensor
