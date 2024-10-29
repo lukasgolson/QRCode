@@ -45,6 +45,8 @@ class SpatialTransformer(Layer):
         # Generate a grid of coordinates
         grid = self._generate_grid(theta, self.input_shape[0:3])  # Get height and width from input shape
 
+        grid = tf.cast(grid, self.input_dtype)  # Cast to the same dtype as the input
+
         # Sample the input using the generated grid
         x_transformed = self._sampler(x, grid)
         return x_transformed
@@ -105,8 +107,8 @@ class SpatialTransformer(Layer):
         y = grid[:, :, :, 1]
 
         # Scale grid from [-1, 1] to image coordinates
-        x = 0.5 * ((x + 1.0) * tf.cast(width - 1, self.dtype))
-        y = 0.5 * ((y + 1.0) * tf.cast(height - 1, self.dtype))
+        x = 0.5 * ((x + 1.0) * width - 1)
+        y = 0.5 * ((y + 1.0) * height - 1)
 
         # Get the corner pixel values around the transformed coordinates
         x0 = tf.floor(x)
