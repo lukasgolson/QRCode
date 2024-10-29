@@ -188,7 +188,7 @@ def run_training(epochs=24, headless_epochs=6, batch_size=16,  total_items_per_e
 
 if __name__ == "__main__":
     epochs = 48
-    batch_size = 12
+    batch_size = 32
     run_training(epochs=epochs, batch_size=batch_size, gradient_accumulation_steps=None,
                  total_items_per_epoch=batch_size * 500)
     print("Training complete.")
