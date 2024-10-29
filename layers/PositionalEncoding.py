@@ -13,6 +13,7 @@ class PositionalEncoding(keras.layers.Layer):
         self.depth = None
         self.length = None
 
+
     def build(self, input_shape):
         """Build the layer and compute length and depth based on input shape."""
         # Get length and depth from the input shape
@@ -21,12 +22,10 @@ class PositionalEncoding(keras.layers.Layer):
 
         # Initialize the positional encoding
 
-        # get dtype from layer input
-        dtype = self.dtype
 
 
         # get the dtype of the input tensor
-        self.pos_encoding = positional_encoding(self.length, self.depth)
+        self.pos_encoding = positional_encoding(self.length, self.depth, self.input_dtype)
 
     def call(self, inputs):
         """Applies the positional encoding to the input tensor."""
@@ -36,7 +35,7 @@ class PositionalEncoding(keras.layers.Layer):
 
 @tf.function
 @keras.saving.register_keras_serializable(package="qr_model", name="positional_encoding")
-def positional_encoding(length, depth):
+def positional_encoding(length, depth, dtype):
     pos = np.arange(length)[:, np.newaxis]
     i = np.arange(depth)[np.newaxis, :]
     angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(depth))
@@ -49,6 +48,6 @@ def positional_encoding(length, depth):
 
     pos_encoding = pos_encoding[np.newaxis, ...]  # Add batch dimension
 
-    #return tf.cast(pos_encoding, dtype=dtype)
+    return tf.cast(pos_encoding, dtype=dtype)
 
-    return pos_encoding
+
