@@ -54,9 +54,9 @@ class SpatialTransformer(Layer):
         batch_size, height, width = output_size
 
         # Create normalized grid
-        x_grid = tf.tile(tf.range(0, width, dtype=self.compute_dtype)[None, None, :],
+        x_grid = tf.tile(tf.range(0, width, dtype=tf.float32)[None, None, :],
                          (1, height, 1))  # Shape: (1, height, width)
-        y_grid = tf.tile(tf.range(0, height, dtype=self.compute_dtype)[None, :, None],
+        y_grid = tf.tile(tf.range(0, height, dtype=tf.float32)[None, :, None],
                          (1, 1, width))  # Shape: (1, height, width)
 
         # Normalize the grid to the range [-1, 1]
@@ -71,6 +71,8 @@ class SpatialTransformer(Layer):
         batch_size = tf.shape(theta)[0]  # Determine the batch size from theta
 
         grid = tf.tile(grid, [batch_size, 1, 1])  # Shape: (batch_size, height * width, 2)
+
+        grid = tf.cast(grid, self.compute_dtype)  # Cast to the same dtype as the input
 
         theta = tf.reshape(theta, (batch_size, 2, 3))  # Shape: (batch_size, 2, 3)
 
