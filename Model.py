@@ -1,3 +1,4 @@
+import keras
 import numpy as np
 from keras import layers, Model
 from keras.src.layers import MultiHeadAttention, Conv2D, Add, Conv3D, Conv1D
@@ -141,6 +142,9 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
 
 
 def create_model(input_shape, max_sequence_length, num_chars):
+
+    keras.config.set_dtype_policy("mixed_float16")
+
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
