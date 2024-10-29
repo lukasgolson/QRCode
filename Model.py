@@ -120,7 +120,7 @@ def create_attention_module(input_tensor, heads=8, depth=1, dropout=0.1):
 
 
 # The idea is to turn individual pixels into a sequence of embeddings
-def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
+def cnn_to_sequence(input_tensor, feature_length=128):
     x = layers.BatchNormalization()(input_tensor)
 
     # eventually we might want to change this to patch extraction
@@ -150,9 +150,9 @@ def create_model(input_shape, max_sequence_length, num_chars):
 
     spatial_transformer = SpatialTransformer()(inputs)
 
-    x = create_cnn_architecture(spatial_transformer, 4, 128, 64)
+    x = create_cnn_architecture(spatial_transformer, 4, 128, 128)
 
-    x = cnn_to_sequence(x, max_sequence_length, 256)
+    x = cnn_to_sequence(x, 256)
 
     input_length = x.shape[1]
     # start at 4096
@@ -160,7 +160,7 @@ def create_model(input_shape, max_sequence_length, num_chars):
     while input_length > max_sequence_length:
         x = create_attention_module(x, 8, 1)
         #      # Apply Conv1D with calculated strides and kernel size
-        x = layers.Conv1D(filters=num_chars * 2, kernel_size=2,
+        x = layers.Conv1D(filters=num_chars, kernel_size=2,
                           strides=2, padding='valid')(x)
 
         input_length = x.shape[1]

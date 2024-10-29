@@ -59,7 +59,6 @@ def apply_random_image_rotation(image, max_angle=360):
 
 
 def generate_random_data(population=None, max_length=300):
-
     if max_length == 0:
         return ''
 
@@ -109,7 +108,7 @@ def load_qr_code_data(target_size, encoder=None):
             yield normalize_image(dirty_img, target_size), encoded_content
 
 
-def create_dataset(target_size=(512, 512), batch_size=32, shuffle=True, max_seq_len=512, num_chars=128):
+def create_dataset(target_size=(512, 512), batch_size=32, shuffle=False, max_seq_len=512, num_chars=128):
     encoder = CharLevelEncoder(max_sequence_length=max_seq_len, num_chars=num_chars)  # Initialize encoder
     dataset = tf.data.Dataset.from_generator(
         lambda: load_qr_code_data(target_size, encoder=encoder),  # Pass encoder
