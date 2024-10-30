@@ -167,23 +167,22 @@ def run_training(epochs=24, headless_epochs=6, batch_size=16,  total_items_per_e
     os.makedirs(save_path, exist_ok=True)  # Create the directory if it does not exist
     date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    with strategy.scope():
-        model = make_or_restore_model(max_sequence_length, num_chars, target_image_size, gradient_accumulation_steps,
-                                      compile=False)
-        model.summary()
+    model = make_or_restore_model(max_sequence_length, num_chars, target_image_size, gradient_accumulation_steps,
+                                  compile=False)
+    model.summary()
 
-        model.save(os.path.join(save_path, f'qr_model_empty_{date}.keras'))
+    model.save(os.path.join(save_path, f'qr_model_empty_{date}.keras'))
 
-        freeze_layer(model, 'spatial_transformer', frozen=True, recompile=True)
+    freeze_layer(model, 'spatial_transformer', frozen=True, recompile=True)
 
-        model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=headless_epochs,
-                  callbacks=callbacks)
+    model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=headless_epochs,
+              callbacks=callbacks)
 
-        freeze_layer(model, 'spatial_transformer', frozen=False, recompile=True)
+    freeze_layer(model, 'spatial_transformer', frozen=False, recompile=True)
 
-        model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
-                  callbacks=callbacks,
-                  initial_epoch=headless_epochs)
+    model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
+              callbacks=callbacks,
+              initial_epoch=headless_epochs)
 
     model.save(os.path.join(save_path, f'qr_model_{date}.keras'))
 
