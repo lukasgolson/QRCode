@@ -134,7 +134,7 @@ def cnn_to_sequence(input_tensor, feature_length=128):
 
     # Get initial input length
 
-    x = layers.TimeDistributed(layers.Dense(feature_length, activation="mish", kernel_initializer="he_normal"))(x)
+    x = layers.TimeDistributed(layers.Dense(feature_length * 2, activation="mish", kernel_initializer="he_normal"))(x)
 
     x = PositionalEncoding()(x)
 
@@ -152,13 +152,13 @@ def create_model(input_shape, max_sequence_length, num_chars):
 
     x = create_cnn_architecture(spatial_transformer, 4, 128, 64)
 
-    x = cnn_to_sequence(x, 256)
+    x = cnn_to_sequence(x, 128)
 
     input_length = x.shape[1]
     # start at 4096
 
     while input_length > max_sequence_length:
-        x = create_attention_module(x, 4, 1)
+        x = create_attention_module(x, 8, 1)
         #      # Apply Conv1D with calculated strides and kernel size
         x = layers.Conv1D(filters=num_chars, kernel_size=2,
                           strides=2, padding='valid')(x)
