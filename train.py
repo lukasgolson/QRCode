@@ -142,7 +142,7 @@ def run_training(epochs=24, headless_epochs=6, batch_size=16,  total_items_per_e
 
     strategy = tf.distribute.MirroredStrategy()
 
-    tf.keras.backend.clear_session()
+    #tf.keras.backend.clear_session()
 
     os.makedirs("logs/fit/", exist_ok=True)
     log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

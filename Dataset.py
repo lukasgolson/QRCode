@@ -121,8 +121,12 @@ def create_dataset(target_size=(512, 512), batch_size=32, shuffle=False, max_seq
     if shuffle:
         dataset = dataset.shuffle(buffer_size=250)
 
-    dataset = dataset.batch(batch_size, drop_remainder=True)
+    dataset = dataset.batch(batch_size, num_parallel_calls=tf.data.AUTOTUNE)
     dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
+
+
+    for batch in dataset.take(1):  # Inspect the first batch
+        print(batch.shape)
 
     return dataset
 
