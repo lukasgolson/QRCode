@@ -155,6 +155,10 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
 
 
 def create_model(input_shape, max_sequence_length, num_chars):
+
+    tensorflow.keras.backend.clear_session()
+
+
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 

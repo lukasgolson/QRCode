@@ -78,10 +78,10 @@ def get_model(max_sequence_length=512, num_chars=128, target_image_size=512):
 
 
 def compile_model(model):
-    # optimizer = tf.keras.optimizers.AdamW()
-    optimizer = 'Adam'
+    optimizer = tf.keras.optimizers.AdamW()
+    #optimizer = 'Adam'
 
-    model.compile(optimizer=optimizer, loss="categorical_crossentropy",
+    model.compile(optimizer=optimizer, loss=masked_categorical_crossentropy,
                   metrics=['accuracy', 'precision', 'recall'])
 
     return model
@@ -107,21 +107,7 @@ def make_or_restore_model(max_sequence_length=512, num_chars=128, target_image_s
     return model
 
 
-def create_lr_scheduler(initial_lr, max_lr, min_lr, warmup_epochs, period_epochs):
-    """Creates a learning rate scheduler function with closed-over parameters."""
 
-    def lr_scheduler(epoch, lr):
-        """Calculate the learning rate based on the current epoch."""
-        if epoch < warmup_epochs:
-            # Linearly increase learning rate during warmup
-            return initial_lr + (max_lr - initial_lr) * (epoch / warmup_epochs)
-        else:
-            # Calculate the cosine annealing phase
-            cycle = np.floor(1 + (epoch - warmup_epochs) / period_epochs)
-            x = np.abs((epoch - warmup_epochs) / period_epochs - 2 * cycle + 1)
-            return min_lr + 0.5 * (max_lr - min_lr) * (1 + np.cos(np.pi * x))
-
-    return keras.callbacks.LearningRateScheduler(lr_scheduler)
 
 
 def run_training(epochs=24, headless_epochs=6, batch_size=16,  total_items_per_epoch=16 * 500,
@@ -142,7 +128,6 @@ def run_training(epochs=24, headless_epochs=6, batch_size=16,  total_items_per_e
 
     #strategy = tf.distribute.MirroredStrategy()
 
-    #tf.keras.backend.clear_session()
 
     os.makedirs("logs/fit/", exist_ok=True)
     log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
