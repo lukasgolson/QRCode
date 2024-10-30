@@ -146,6 +146,8 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
         x = layers.Conv1D(filters=feature_length, kernel_size=2,
                           strides=2, padding='valid')(x)
 
+        input_length = x.shape[1]
+
 
     x = PositionalEncoding()(x)
 
