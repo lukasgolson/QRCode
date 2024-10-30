@@ -150,7 +150,7 @@ def create_model(input_shape, max_sequence_length, num_chars):
 
     spatial_transformer = SpatialTransformer()(inputs)
 
-    x = create_cnn_architecture(spatial_transformer, 4, 128, 128)
+    x = create_cnn_architecture(spatial_transformer, 4, 128, 64)
 
     x = cnn_to_sequence(x, 256)
 
@@ -158,7 +158,7 @@ def create_model(input_shape, max_sequence_length, num_chars):
     # start at 4096
 
     while input_length > max_sequence_length:
-        x = create_attention_module(x, 8, 1)
+        x = create_attention_module(x, 4, 1)
         #      # Apply Conv1D with calculated strides and kernel size
         x = layers.Conv1D(filters=num_chars, kernel_size=2,
                           strides=2, padding='valid')(x)
