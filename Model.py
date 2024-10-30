@@ -162,9 +162,9 @@ def create_model(input_shape, max_sequence_length, num_chars):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    spatial_transformer = SpatialTransformer(dtype='float32')(inputs)
+    #spatial_transformer = SpatialTransformer(dtype='float32')(inputs)
 
-    x = create_cnn_architecture(spatial_transformer, 4, 128, 64)
+    x = create_cnn_architecture(inputs, 4, 128, 64)
 
     x = cnn_to_sequence(x, 512, 128)
 
