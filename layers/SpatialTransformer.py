@@ -39,7 +39,6 @@ class SpatialTransformer(Layer):
 
         # Predict transformation parameters using the localization network
         theta = self.localization_network(x)  # Should have shape (batch_size, 6)
-        theta = tf.cast(theta, self.compute_dtype)
 
         # Generate a grid of coordinates
         grid = self._generate_grid(theta, self.input_shape[0:3])  # Get height and width from input shape
@@ -66,24 +65,34 @@ class SpatialTransformer(Layer):
         # Stack grids to create the full grid
         grid = tf.stack([x_grid, y_grid], axis=-1)  # Shape: (1, height, width, 2)
 
+        # print(f"Initial grid shape: {grid.shape}")  # Should be (1, height, width, 2)
+
         grid = tf.reshape(grid, (1, height * width, 2))  # Shape: (1, height * width, 2)
+
+        # print(f"Reshaped grid shape: {grid.shape}")  # Should be (1, height * width, 2)
 
         batch_size = tf.shape(theta)[0]  # Determine the batch size from theta
 
         grid = tf.tile(grid, [batch_size, 1, 1])  # Shape: (batch_size, height * width, 2)
 
-        grid = tf.cast(grid, self.compute_dtype)  # Cast to the same dtype as the input
-
         theta = tf.reshape(theta, (batch_size, 2, 3))  # Shape: (batch_size, 2, 3)
+
+        # print(f"grid rep: {grid.shape}, theta: {theta.shape}")
 
         affine_matrix = theta[:, :, :2]  # Shape: (batch_size, 2, 2)
         translation = theta[:, :, 2]  # Shape: (batch_size, 2)
 
         transformed_grid = tf.linalg.matmul(grid, affine_matrix)  # Resulting shape: (batch_size, height * width, 2)
 
+        #   print(f"Transformed grid shape: {transformed_grid.shape}")  # Should be (batch_size, height * width, 2)
+
         transformed_grid = transformed_grid + translation[:, None, :]  # Broadcast translation to all grid points
 
+        #  print(f"Transformed grid shape (2): {transformed_grid.shape}")  # Should be (batch_size, height * width, 2)
+
         reshaped = tf.reshape(transformed_grid, (batch_size, height, width, 2))
+
+        #   print(f"Reshaped transformed grid shape: {reshaped.shape}")  # Should be (batch_size, height, width, 2)
 
         return reshaped
 
@@ -106,12 +115,8 @@ class SpatialTransformer(Layer):
         y = grid[:, :, :, 1]
 
         # Scale grid from [-1, 1] to image coordinates
-
-        width_f = tf.cast(width, self.compute_dtype)
-        height_f = tf.cast(height, self.compute_dtype)
-
-        x = 0.5 * tf.cast((x + 1.0) * width_f - 1, self.compute_dtype)
-        y = 0.5 * tf.cast((y + 1.0) * height_f - 1, self.compute_dtype)
+        x = 0.5 * ((x + 1.0) * tf.cast(width - 1, tf.float32))
+        y = 0.5 * ((y + 1.0) * tf.cast(height - 1, tf.float32))
 
         # Get the corner pixel values around the transformed coordinates
         x0 = tf.floor(x)
@@ -119,10 +124,10 @@ class SpatialTransformer(Layer):
         y0 = tf.floor(y)
         y1 = y0 + 1
 
-        x0 = tf.clip_by_value(x0, 0, tf.cast(width - 1, self.compute_dtype))
-        x1 = tf.clip_by_value(x1, 0, tf.cast(width - 1, self.compute_dtype))
-        y0 = tf.clip_by_value(y0, 0, tf.cast(height - 1, self.compute_dtype))
-        y1 = tf.clip_by_value(y1, 0, tf.cast(height - 1, self.compute_dtype))
+        x0 = tf.clip_by_value(x0, 0, tf.cast(width - 1, tf.float32))
+        x1 = tf.clip_by_value(x1, 0, tf.cast(width - 1, tf.float32))
+        y0 = tf.clip_by_value(y0, 0, tf.cast(height - 1, tf.float32))
+        y1 = tf.clip_by_value(y1, 0, tf.cast(height - 1, tf.float32))
 
         # Interpolation weights
         wa = (x1 - x) * (y1 - y)
