@@ -155,7 +155,7 @@ def run_training(epochs=24, headless_epochs=6, batch_size=16,  total_items_per_e
     date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     model = make_or_restore_model(max_sequence_length, num_chars, target_image_size, gradient_accumulation_steps,
-                                  compile=False)
+                                  compile=True)
     model.summary()
 
     model.save(os.path.join(save_path, f'qr_model_empty_{date}.keras'))
