@@ -160,12 +160,12 @@ def run_training(epochs=24, headless_epochs=6, batch_size=16,  total_items_per_e
 
     model.save(os.path.join(save_path, f'qr_model_empty_{date}.keras'))
 
-    freeze_layer(model, 'spatial_transformer', frozen=True, recompile=True)
+   # freeze_layer(model, 'spatial_transformer', frozen=True, recompile=True)
 
     model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=headless_epochs,
               callbacks=callbacks)
 
-    freeze_layer(model, 'spatial_transformer', frozen=False, recompile=True)
+  #  freeze_layer(model, 'spatial_transformer', frozen=False, recompile=True)
 
     model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
               callbacks=callbacks,
