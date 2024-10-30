@@ -140,7 +140,7 @@ def run_training(epochs=24, headless_epochs=6, batch_size=16,  total_items_per_e
 
     #keras.config.set_dtype_policy("mixed_float16")
 
-    strategy = tf.distribute.MirroredStrategy()
+    #strategy = tf.distribute.MirroredStrategy()
 
     #tf.keras.backend.clear_session()
 
