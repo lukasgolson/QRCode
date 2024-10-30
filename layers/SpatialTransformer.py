@@ -30,7 +30,6 @@ class SpatialTransformer(Layer):
 
         super(SpatialTransformer, self).build(input_shape)
 
-    @tf.function
     def call(self, inputs):
         # Unpack the inputs
         x = inputs  # x is the input image/feature map
