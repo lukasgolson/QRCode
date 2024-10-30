@@ -4,6 +4,7 @@ from keras.src.layers import MultiHeadAttention, Conv2D, Add, Conv3D, Conv1D
 from tensorflow.keras.layers import Dropout, BatchNormalization, Dense
 
 from layers.Activations import Mish
+from layers.ExtractPatches import ExtractPatches
 from layers.PositionalEncoding import PositionalEncoding
 from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
@@ -126,14 +127,23 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
 
     x = layers.Conv2D(x.shape[-1], (1, 1), padding='same', activation='mish', kernel_initializer="he_normal")(x)
 
-    x = layers.Reshape((x.shape[1] * x.shape[2], x.shape[3]))(x)
+    patch_size = (2, 2)
 
-    x = layers.Conv1D(filters=feature_length, kernel_size=1, padding='valid', activation='mish',
-                      kernel_initializer="he_normal")(x)
+    x = ExtractPatches(2)(x)
+
+    x = layers.Reshape((-1, patch_size[0] * patch_size[1] * x.shape[-1]))(x)
 
     # Get initial input length
 
-    x = layers.TimeDistributed(layers.Dense(feature_length * 2, activation="mish", kernel_initializer="he_normal"))(x)
+    x = layers.TimeDistributed(layers.Dense(feature_length, activation="mish", kernel_initializer="he_normal"))(x)
+
+    input_length = x.shape[1]
+    while input_length > max_sequence_length:
+        #      # Apply Conv1D with calculated strides and kernel size
+        x = layers.Conv1D(filters=feature_length, kernel_size=2,
+                          strides=2, padding='valid')(x)
+
+        input_length = x.shape[1]
 
     x = PositionalEncoding()(x)
 
@@ -154,7 +164,7 @@ def create_model(input_shape, max_sequence_length, num_chars):
     # start at 4096
 
     while input_length > max_sequence_length:
-        x = create_attention_module(x, 8, 1)
+        # x = create_attention_module(x, 8, 1)
         #      # Apply Conv1D with calculated strides and kernel size
         x = layers.Conv1D(filters=num_chars, kernel_size=2,
                           strides=2, padding='valid')(x)
