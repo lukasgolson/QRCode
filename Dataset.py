@@ -125,8 +125,10 @@ def create_dataset(target_size=(512, 512), batch_size=32, shuffle=False, max_seq
     dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
 
 
-    for batch in dataset.take(1):  # Inspect the first batch
-        print(batch.shape)
+    for images, contents in dataset.take(1):  # Take one batch for example
+        print("Images shape:", images.shape)
+        print("Contents shape:", contents.shape)
+        break
 
     return dataset
 
