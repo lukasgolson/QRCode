@@ -1,10 +1,12 @@
 import keras
 import numpy as np
+import tensorflow
 from keras import layers, Model
 from keras.src.layers import MultiHeadAttention, Conv2D, Add, Conv3D, Conv1D
 from tensorflow.keras.layers import Dropout, BatchNormalization, Dense
 
 from layers.Activations import Mish
+from layers.ExtractPatches import ExtractPatches
 from layers.PositionalEncoding import PositionalEncoding
 from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
@@ -120,21 +122,30 @@ def create_attention_module(input_tensor, heads=8, depth=1, dropout=0.1):
 
 
 # The idea is to turn individual pixels into a sequence of embeddings
-def cnn_to_sequence(input_tensor, feature_length=128):
+def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
     x = layers.BatchNormalization()(input_tensor)
 
     # eventually we might want to change this to patch extraction
 
     x = layers.Conv2D(x.shape[-1], (1, 1), padding='same', activation='mish', kernel_initializer="he_normal")(x)
 
-    x = layers.Reshape((x.shape[1] * x.shape[2], x.shape[3]))(x)
+    patch_size = (2, 2)
 
-    x = layers.Conv1D(filters=feature_length, kernel_size=1, padding='valid', activation='mish',
-                      kernel_initializer="he_normal")(x)
+    x = ExtractPatches(2)(x)
+
+    x = layers.Reshape((-1, patch_size[0] * patch_size[1] * x.shape[-1]))(x)
 
     # Get initial input length
 
-    x = layers.TimeDistributed(layers.Dense(feature_length * 2, activation="mish", kernel_initializer="he_normal"))(x)
+    x = layers.TimeDistributed(layers.Dense(feature_length, activation="mish", kernel_initializer="he_normal"))(x)
+
+
+    input_length = x.shape[1]
+    while input_length > max_sequence_length:
+        #      # Apply Conv1D with calculated strides and kernel size
+        x = layers.Conv1D(filters=feature_length, kernel_size=2,
+                          strides=2, padding='valid')(x)
+
 
     x = PositionalEncoding()(x)
 
@@ -142,32 +153,20 @@ def cnn_to_sequence(input_tensor, feature_length=128):
 
 
 def create_model(input_shape, max_sequence_length, num_chars):
-
-    keras.config.set_dtype_policy("mixed_float16")
-
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    spatial_transformer = SpatialTransformer()(inputs)
+    spatial_transformer = SpatialTransformer(dtype='float32')(inputs)
 
     x = create_cnn_architecture(spatial_transformer, 4, 128, 64)
 
-    x = cnn_to_sequence(x, 128)
+    x = cnn_to_sequence(x, 512, 128)
 
-    input_length = x.shape[1]
-    # start at 4096
+    # reduce the sequence length to the maximum sequence length
 
-    while input_length > max_sequence_length:
-        x = create_attention_module(x, 8, 1)
-        #      # Apply Conv1D with calculated strides and kernel size
-        x = layers.Conv1D(filters=num_chars, kernel_size=2,
-                          strides=2, padding='valid')(x)
+    x = create_attention_module(x, 6, 2)
 
-        input_length = x.shape[1]
-
-    x = create_attention_module(x, 8, 4)
-
-    x = create_dense_architecture(x, num_chars, 2, 0.1)
+    # x = create_dense_architecture(x, num_chars, 2, 0.1)
 
     outputs = layers.TimeDistributed(layers.Dense(num_chars, activation='softmax'))(x)
 

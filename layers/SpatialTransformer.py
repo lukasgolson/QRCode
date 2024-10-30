@@ -16,13 +16,13 @@ class SpatialTransformer(Layer):
 
         # Define the localization networtf
         self.localization_network = keras.Sequential([
-            Conv2D(8, (3, 3), strides=(2, 2), activation='relu', padding='valid'),
-            Conv2D(8, (3, 3), strides=(2, 2), activation='relu', padding='valid'),
-            Conv2D(8, (1, 1), strides=(2, 2), activation='relu', padding='valid'),
-            Flatten(),
-            Dense(50, activation='relu'),
+            Conv2D(8, (3, 3), strides=(2, 2), activation='relu', padding='valid', dtype=self.dtype),
+            Conv2D(8, (3, 3), strides=(2, 2), activation='relu', padding='valid',dtype=self.dtype),
+            Conv2D(8, (1, 1), strides=(2, 2), activation='relu', padding='valid',dtype=self.dtype),
+            Flatten(dtype=self.dtype),
+            Dense(50, activation='relu',dtype=self.dtype),
             Dense(6, activation='linear', kernel_initializer='zeros',
-                  bias_initializer=tf.constant_initializer([1, 0, 0, 0, 1, 0]))
+                  bias_initializer=tf.constant_initializer([1, 0, 0, 0, 1, 0]),dtype=self.dtype)
             # Identity transformation initialization
         ])
 
@@ -30,6 +30,7 @@ class SpatialTransformer(Layer):
 
         super(SpatialTransformer, self).build(input_shape)
 
+    @tf.function
     def call(self, inputs):
         # Unpack the inputs
         x = inputs  # x is the input image/feature map
@@ -40,8 +41,11 @@ class SpatialTransformer(Layer):
         # Predict transformation parameters using the localization network
         theta = self.localization_network(x)  # Should have shape (batch_size, 6)
 
+        tf.cast(theta, tf.float32)
+
         # Generate a grid of coordinates
         grid = self._generate_grid(theta, self.input_shape[0:3])  # Get height and width from input shape
+
 
         # Sample the input using the generated grid
         x_transformed = self._sampler(x, grid)
@@ -81,6 +85,8 @@ class SpatialTransformer(Layer):
 
         affine_matrix = theta[:, :, :2]  # Shape: (batch_size, 2, 2)
         translation = theta[:, :, 2]  # Shape: (batch_size, 2)
+
+
 
         transformed_grid = tf.linalg.matmul(grid, affine_matrix)  # Resulting shape: (batch_size, height * width, 2)
 

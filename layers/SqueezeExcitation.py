@@ -2,6 +2,7 @@ import keras
 from keras import Layer
 from keras.src import initializers
 from keras.src.layers import Dense, GlobalAveragePooling2D, Reshape, Multiply
+import tensorflow as tf
 
 
 @keras.saving.register_keras_serializable(package="qr_model", name="SqueezeExcitation")
@@ -20,6 +21,7 @@ class SqueezeExcitation(Layer):
         self.dense1 = Dense(self.channels // self.ratio, activation='relu')
         self.dense2 = Dense(self.channels, activation='mish', kernel_initializer="he_normal")
 
+    @tf.function
     def call(self, inputs):
         # Squeeze: Global Average Pooling
         se = GlobalAveragePooling2D()(inputs)

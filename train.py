@@ -79,7 +79,7 @@ def get_model(max_sequence_length=512, num_chars=128, target_image_size=512):
 
 def compile_model(model):
     # optimizer = tf.keras.optimizers.AdamW()
-    optimizer = tf.keras.optimizers.Adafactor()
+    optimizer = 'Adam'
 
     model.compile(optimizer=optimizer, loss=masked_categorical_crossentropy,
                   metrics=['accuracy', 'precision', 'recall'])
@@ -136,7 +136,9 @@ def run_training(epochs=24, headless_epochs=6, batch_size=16,  total_items_per_e
 
     assert epochs >= headless_epochs, "The number of epochs should be greater than or equal to the headless epochs."
 
-    # keras.mixed_precision.set_global_policy("mixed_float16")
+    keras.mixed_precision.set_global_policy("mixed_float16")
+
+    #keras.config.set_dtype_policy("mixed_float16")
 
     strategy = tf.distribute.MirroredStrategy()
 
@@ -188,7 +190,7 @@ def run_training(epochs=24, headless_epochs=6, batch_size=16,  total_items_per_e
 
 if __name__ == "__main__":
     epochs = 48
-    batch_size = 32
+    batch_size = 1
     run_training(epochs=epochs, batch_size=batch_size, gradient_accumulation_steps=None,
                  total_items_per_epoch=batch_size * 500)
     print("Training complete.")
