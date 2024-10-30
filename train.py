@@ -81,7 +81,9 @@ def compile_model(model):
     optimizer = tf.keras.optimizers.AdamW()
     #optimizer = 'Adam'
 
-    model.compile(optimizer=optimizer, loss=masked_categorical_crossentropy,
+    loss = keras.losses.CategoricalCrossentropy()
+
+    model.compile(optimizer=optimizer, loss=loss,
                   metrics=['accuracy', 'precision', 'recall'])
 
     return model
