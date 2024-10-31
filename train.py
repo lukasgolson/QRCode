@@ -98,6 +98,17 @@ def create_lr_scheduler(initial_lr, max_lr, min_lr, warmup_epochs, period_epochs
 def run_training(epochs, headless_epochs=6, batch_size=16, total_items_per_epoch=16 * 500,
                  gradient_accumulation_steps=None, max_sequence_length=512
                  , num_chars=128, target_image_size=512):
+
+    print("Running training with the following parameters:")
+    print(f"Epochs: {epochs}")
+    print(f"Batch size: {batch_size}")
+    print(f"Total items per epoch: {total_items_per_epoch}")
+    print(f"Gradient accumulation steps: {gradient_accumulation_steps}")
+    print(f"Max sequence length: {max_sequence_length}")
+    print(f"Number of characters: {num_chars}")
+    print(f"Target image size: {target_image_size}")
+    print(f"JIT compilation: {JIT_COMPILE}")
+
     steps_per_epoch = total_items_per_epoch // batch_size
     strategy = tf.distribute.MirroredStrategy()
     tf.keras.backend.clear_session()
@@ -143,6 +154,6 @@ if __name__ == "__main__":
     JIT_COMPILE = parser.parse_args().JIT
 
     args = parser.parse_args()
-    run_training(epochs=args.epochs, batch_size=args.batch_size, gradient_accumulation_steps=None,
+    run_training(epochs=args.epochs, batch_size=args.batch_size, gradient_accumulation_steps=args.gradient_accumulation_steps,
                  total_items_per_epoch=args.batch_size * 500, max_sequence_length=args.max_sequence_length, target_image_size=args.target_image_size)
     print("Training complete.")
