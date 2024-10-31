@@ -12,12 +12,12 @@ class SpatialAttention(keras.layers.Layer):
     An optional skip connection can also be included.
     """
 
-    def __init__(self, use_skip_connection=False, **kwargs):
+    def __init__(self, use_residual=True, **kwargs):
         """
         Initializes the SpatialAttention layer.
 
         Args:
-            use_skip_connection (bool): If True, enables the skip connection.
+            use_residual (bool): If True, enables the skip connection.
             **kwargs: Additional keyword arguments passed to the parent class.
         """
         super(SpatialAttention, self).__init__(**kwargs)
@@ -31,7 +31,7 @@ class SpatialAttention(keras.layers.Layer):
         self.concatenate = Concatenate(axis=-1)
         self.batch_norm = BatchNormalization(name='batch_norm')
         self.activation = Activation('mish', name='activation')  # 'mish' can be defined if not available in Keras
-        self.use_skip_connection = use_skip_connection
+        self.use_residual = use_residual
 
     def build(self, input_shape):
         """
@@ -60,11 +60,12 @@ class SpatialAttention(keras.layers.Layer):
 
         conv_pooling_shape = self.conv_pooling.compute_output_shape(concatenate_shape)
 
-        self.batch_norm.build(conv_pooling_shape)
+        if self.use_residual:
+            self.batch_norm.build(conv_pooling_shape)
 
-        batch_norm_shape = self.batch_norm.compute_output_shape(conv_pooling_shape)
+            batch_norm_shape = self.batch_norm.compute_output_shape(conv_pooling_shape)
 
-        self.activation.build(batch_norm_shape)
+            self.activation.build(batch_norm_shape)
 
         super(SpatialAttention, self).build(input_shape)
 
@@ -95,8 +96,8 @@ class SpatialAttention(keras.layers.Layer):
         x = Multiply()([inputs, x])
 
         # If skip connection is enabled, add the input to the output
-        if self.use_skip_connection:
-            x = Add()([x, inputs])  # Skip connection
+        if self.use_residual:
+            x = Add()([inputs, x])  # Skip connection
 
             # Apply batch normalization and activation
             x = self.batch_norm(x)
@@ -112,7 +113,7 @@ class SpatialAttention(keras.layers.Layer):
             dict: Configuration dictionary containing layer parameters.
         """
         base_config = super(SpatialAttention, self).get_config()
-        config = {'use_skip_connection': self.use_skip_connection}
+        config = {'use_residual': self.use_residual}
         return {**base_config, **config}
 
     @classmethod

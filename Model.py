@@ -11,37 +11,47 @@ from layers.SpatialTransformer import SpatialTransformer
 from layers.SqueezeExcitation import SqueezeExcitation
 
 
-def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channels=64, attention_frequency=2,
-                            use_residual=True):
-    x = input_tensor
-    current_height = input_tensor.shape[1]  # Current height of the input image
-    current_width = input_tensor.shape[2]  # Current width of the input image
-    current_channels = input_tensor.shape[-1] + 1  # Adjust channels
-
+def calculate_downscale_frequency(length, min_resolution, max_resolution):
     # Calculate total downscales possible
     total_downscales = 0
+    current_height = max_resolution
+    current_width = max_resolution
+
     while current_height > min_resolution and current_width > min_resolution:
-        total_downscales += 1
         current_height //= 2
         current_width //= 2
+
+        if current_height >= min_resolution and current_width >= min_resolution:
+            total_downscales += 1
 
     # Calculate downscale frequency
     if total_downscales > 0:
         downscale_frequency = length // total_downscales
     else:
-        downscale_frequency = length  # If no downscale possible, set to total length
+        downscale_frequency = 0  # If no downscale possible, set to 0
 
-    # Reset current height and width for actual processing
-    current_height = input_tensor.shape[1]
-    current_width = input_tensor.shape[2]
+    return downscale_frequency
+
+
+def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channels=64, attention_frequency=2,
+                            use_residual=True):
+    x = input_tensor
+    current_height = input_tensor.shape[1]  # Current height of the input image
+    current_channels = input_tensor.shape[-1]
+
+    # Calculate downscale frequency
+    downscale_frequency = calculate_downscale_frequency(length, min_resolution, current_height)
+
+    x = layers.Conv2D(3, (1, 1), padding='same', activation='mish')(x)
+
+    current_channels = x.shape[-1]
 
     for i in range(length):
         if i % attention_frequency == 0:
-            x = SqueezeExcitation()(x)
-            x = SpatialAttention(use_skip_connection=True)(x)
+            x = SqueezeExcitation(use_residual=True)(x)
+            x = SpatialAttention(use_residual=True)(x)
 
         # Calculate the current number of channels
-        current_channels = min(current_channels * (2 ** i), max_channels)
 
         residual = x
 
@@ -52,17 +62,16 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
             if residual.shape[-1] != x.shape[-1]:
                 residual = Conv2D(x.shape[-1], (1, 1))(residual)
 
-            x = Add()([x, residual])
+            x = Add()([residual, x])
 
             x = Mish()(x)
             x = BatchNormalization()(x)
 
-        # Check if downscale_frequency is non-zero before the modulo operation
-        if downscale_frequency > 0 and total_downscales > 0 and i % downscale_frequency == 0:
-            if current_height > min_resolution and current_width > min_resolution:
-                x = Conv2D(current_channels, (1, 1), strides=(2, 2), padding='same', activation=None)(x)
-                current_height //= 2  # Update height
-                current_width //= 2  # Update width
+        if downscale_frequency > 0 and i % downscale_frequency == 0 and i > 0:
+            x = Conv2D(current_channels, (1, 1), strides=(2, 2), padding='same', activation=None)(x)
+
+        current_channels = min(current_channels * (2 ** i), max_channels)
+
 
     return x
 
@@ -127,8 +136,6 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128, d
 
     x = layers.Conv2D(x.shape[-1], (1, 1), padding='same', activation='mish')(x)
 
-
-
     # get x size and y size
     x_size = x.shape[1]
     y_size = x.shape[2]
@@ -138,13 +145,15 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128, d
     # get the stride size necessary to reduce to 64X64
     stride_size = size // downsampled_size
 
-    x = ExtractPatches(stride_size)(x)
+    # if stride size is 0, set patch and stride to not downsample
+    if stride_size == 0:
+        stride_size = 1
+
+    x = ExtractPatches(stride_size=(stride_size, stride_size), patch_size=(stride_size, stride_size))(x)
 
     # reshape from 64, 64, 256 to 64x64, 256
 
     x = layers.Reshape((x.shape[1] * x.shape[2], x.shape[3]))(x)
-
-
 
     # Get initial input length
 
@@ -169,24 +178,13 @@ def create_model(input_shape, max_sequence_length, num_chars):
 
     spatial_transformer = SpatialTransformer()(inputs)
 
-    x = create_cnn_architecture(spatial_transformer, 4, 128, 64)
+    x = create_cnn_architecture(spatial_transformer, 4, 64, 64)
 
     x = cnn_to_sequence(x, max_sequence_length, 128, 64)
 
-    input_length = x.shape[1]
-    # start at 4096
+    # x = create_attention_module(x, 8, 4)
 
-    while input_length > max_sequence_length:
-        # x = create_attention_module(x, 8, 1)
-        #      # Apply Conv1D with calculated strides and kernel size
-        x = layers.Conv1D(filters=num_chars, kernel_size=2,
-                          strides=2, padding='valid')(x)
-
-        input_length = x.shape[1]
-
-    x = create_attention_module(x, 8, 4)
-
-    x = create_dense_architecture(x, num_chars, 2, 0.1)
+    x = create_dense_architecture(x, num_chars, 1, 0.1)
 
     outputs = layers.TimeDistributed(layers.Dense(num_chars, activation='softmax'))(x)
 
