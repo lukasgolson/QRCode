@@ -70,15 +70,13 @@ def generate_random_data(population=None, max_length=300):
     return content
 
 
-def generate_qr_code(repeats=3):
+def generate_qr_code(repeats=3, max_sequence_length=500):
     """Generate a QR code and return its index for reference."""
-    max_length = random.choice(
-        [random.randint(0, 25), random.randint(26, 100), random.randint(101, 250), random.randint(251, 500)]
-    )
+    content_length = random.randint(0, max_sequence_length)
 
     population = random.choice([string.ascii_uppercase, string.digits, string.ascii_uppercase + string.digits])
 
-    content = generate_random_data(population, max_length)
+    content = generate_random_data(population, content_length)
 
     # Generate a clean QR code
     clean_qr_img = create_qr_code(content, noise_range=(0, 0), max_shift=0, max_rotation=0)
@@ -96,7 +94,7 @@ def normalize_image(image, target_size=(512, 512)):
 def load_qr_code_data(target_size, encoder=None):
     """Infinite generator to create QR codes in memory without saving."""
     while True:
-        content, clean, dirty = generate_qr_code()  # Generate QR codes in memory
+        content, clean, dirty = generate_qr_code(repeats=3, max_sequence_length=encoder.max_sequence_length)  # Generate QR codes in memory
 
         # Encode the content before yielding
         encoded_content = encoder.encode(content)

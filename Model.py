@@ -120,16 +120,25 @@ def create_attention_module(input_tensor, heads=8, depth=1, dropout=0.1):
 
 
 # The idea is to turn individual pixels into a sequence of embeddings
-def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
+def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128, downsampled_size=64):
     x = layers.BatchNormalization()(input_tensor)
 
     # eventually we might want to change this to patch extraction
 
     x = layers.Conv2D(x.shape[-1], (1, 1), padding='same', activation='mish', kernel_initializer="he_normal")(x)
 
-    patch_size = (2, 2)
 
-    x = ExtractPatches(2)(x)
+
+    # get x size and y size
+    x_size = x.shape[1]
+    y_size = x.shape[2]
+
+    size = max(x_size, y_size)
+
+    # get the stride size necessary to reduce to 64X64
+    stride_size = size // downsampled_size
+
+    x = ExtractPatches(stride_size)(x)
 
     # reshape from 64, 64, 256 to 64x64, 256
 
@@ -160,9 +169,9 @@ def create_model(input_shape, max_sequence_length, num_chars):
 
     spatial_transformer = SpatialTransformer()(inputs)
 
-    x = create_cnn_architecture(spatial_transformer, 4, 64, 64)
+    x = create_cnn_architecture(spatial_transformer, 4, 128, 64)
 
-    x = cnn_to_sequence(x, max_sequence_length, 128)
+    x = cnn_to_sequence(x, max_sequence_length, 128, 64)
 
     input_length = x.shape[1]
     # start at 4096
