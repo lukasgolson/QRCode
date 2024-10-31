@@ -128,7 +128,7 @@ if __name__ == "__main__":
     parser.add_argument("--gradient_accumulation_steps", type=int, default=None, help="Number of steps to accumulate gradients.")
     parser.add_argument("--target_image_size", type=int, default=512, help="Size of the target image.")
     parser.add_argument("--max_sequence_length", type=int, default=512, help="Maximum sequence length.")
-    parser.add_argument("--JIT", type=bool, default=False, help="Enable Just-In-Time compilation.")
+    parser.add_argument("-JIT", nargs="?", default=False, const=True, type=bool, help="Enable Just-In-Time compilation.")
 
     global JIT_COMPILE
     JIT_COMPILE = parser.parse_args().JIT
