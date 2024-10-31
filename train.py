@@ -52,10 +52,11 @@ def get_model(max_sequence_length=512, num_chars=128, target_image_size=512):
     return model
 
 
+JIT_COMPILE = False
 def compile_model(model):
     optimizer = tf.keras.optimizers.Adafactor()
     model.compile(optimizer=optimizer, loss=masked_categorical_crossentropy,
-                  metrics=['accuracy', 'precision', 'recall'], jit_compile=False)
+                  metrics=['accuracy', 'precision', 'recall'], jit_compile=JIT_COMPILE)
     return model
 
 

@@ -20,10 +20,10 @@ def create_qr_code(content, error_correction=qrcode.constants.ERROR_CORRECT_L):
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
 
-
     return img
 
-def dirty_qr_code(img, resolution, max_shift=30, max_rotation=60, noise_range=(1, 75)):
+
+def dirty_qr_code(img, max_shift=30, max_rotation=60, noise_range=(1, 75)):
     img = img.copy()
     img = apply_random_image_shift(img, max_shift)
     img = apply_random_image_rotation(img, max_rotation)
@@ -31,11 +31,7 @@ def dirty_qr_code(img, resolution, max_shift=30, max_rotation=60, noise_range=(1
     if noise_range[1] > 0:
         img = add_random_image_noise(img, noise_range)
 
-    img = img.resize(resolution)
-
     return img
-
-
 
 
 def add_random_image_noise(image, noise_range=(1, 255)):
@@ -66,7 +62,6 @@ def apply_random_image_rotation(image, max_angle=360):
 
 
 def generate_random_data(population=None, max_length=300):
-
     if max_length == 0:
         return ''
 
@@ -85,33 +80,27 @@ def generate_qr_code(target_size, repeats=3, max_sequence_length=500):
 
     content = generate_random_data(population, content_length)
 
-
     # Generate a clean QR code
     prototype = create_qr_code(content)
 
-
-
-    clean_qr_img = prototype.resize(target_size)
-
-
     # Generate noisy QR codes
-    dirty_qr_imgs = [dirty_qr_code(prototype, target_size) for _ in range(repeats)]
+    dirty_qr_imgs = [dirty_qr_code(prototype) for _ in range(repeats)]
 
-
-
-
-
-    return content, clean_qr_img, dirty_qr_imgs
+    return content, prototype, dirty_qr_imgs
 
 
 def normalize_image(image, target_size=(512, 512)):
+
+    image = image.resize(target_size)
+
     return np.array(image.convert('L')).reshape((target_size[0], target_size[1], 1)) / 255.0
 
 
 def load_qr_code_data(target_size, encoder=None):
     """Infinite generator to create QR codes in memory without saving."""
     while True:
-        content, clean, dirty = generate_qr_code(target_size, repeats=3, max_sequence_length=encoder.max_sequence_length)  # Generate QR codes in memory
+        content, clean, dirty = generate_qr_code(target_size, repeats=3,
+                                                 max_sequence_length=encoder.max_sequence_length)  # Generate QR codes in memory
 
         # Encode the content before yielding
         encoded_content = encoder.encode(content)
