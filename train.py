@@ -52,7 +52,6 @@ def get_model(max_sequence_length=512, num_chars=128, target_image_size=512):
     return model
 
 
-JIT_COMPILE = False
 def compile_model(model):
     optimizer = tf.keras.optimizers.Adafactor()
     model.compile(optimizer=optimizer, loss=masked_categorical_crossentropy,
@@ -129,6 +128,10 @@ if __name__ == "__main__":
     parser.add_argument("--gradient_accumulation_steps", type=int, default=None, help="Number of steps to accumulate gradients.")
     parser.add_argument("--target_image_size", type=int, default=512, help="Size of the target image.")
     parser.add_argument("--max_sequence_length", type=int, default=512, help="Maximum sequence length.")
+    parser.add_argument("--JIT", type=bool, default=False, help="Enable Just-In-Time compilation.")
+
+    global JIT_COMPILE
+    JIT_COMPILE = parser.parse_args().JIT
 
     args = parser.parse_args()
     run_training(epochs=args.epochs, batch_size=args.batch_size, gradient_accumulation_steps=None,
