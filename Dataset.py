@@ -8,8 +8,7 @@ from char_level_encoder import CharLevelEncoder  # Ensure this is correctly impo
 
 
 # Functions for generating QR codes
-def create_qr_code(content, error_correction=qrcode.constants.ERROR_CORRECT_L, resolution=512, max_shift=30,
-                   max_rotation=60, noise_range=(1, 75)):
+def create_qr_code(content, error_correction=qrcode.constants.ERROR_CORRECT_L):
     qr = qrcode.QRCode(
         version=None,
         error_correction=error_correction,
@@ -21,14 +20,22 @@ def create_qr_code(content, error_correction=qrcode.constants.ERROR_CORRECT_L, r
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
 
+
+    return img
+
+def dirty_qr_code(img, resolution, max_shift=30, max_rotation=60, noise_range=(1, 75)):
+    img = img.copy()
     img = apply_random_image_shift(img, max_shift)
     img = apply_random_image_rotation(img, max_rotation)
 
     if noise_range[1] > 0:
         img = add_random_image_noise(img, noise_range)
 
-    img = img.resize((resolution, resolution))
+    img = img.resize(resolution)
+
     return img
+
+
 
 
 def add_random_image_noise(image, noise_range=(1, 255)):
@@ -70,7 +77,7 @@ def generate_random_data(population=None, max_length=300):
     return content
 
 
-def generate_qr_code(repeats=3, max_sequence_length=500):
+def generate_qr_code(target_size, repeats=3, max_sequence_length=500):
     """Generate a QR code and return its index for reference."""
     content_length = random.randint(0, max_sequence_length)
 
@@ -78,11 +85,21 @@ def generate_qr_code(repeats=3, max_sequence_length=500):
 
     content = generate_random_data(population, content_length)
 
+
     # Generate a clean QR code
-    clean_qr_img = create_qr_code(content, noise_range=(0, 0), max_shift=0, max_rotation=0)
+    prototype = create_qr_code(content)
+
+
+
+    clean_qr_img = prototype.resize(target_size)
+
 
     # Generate noisy QR codes
-    dirty_qr_imgs = [create_qr_code(content) for _ in range(repeats)]
+    dirty_qr_imgs = [dirty_qr_code(prototype, target_size) for _ in range(repeats)]
+
+
+
+
 
     return content, clean_qr_img, dirty_qr_imgs
 
@@ -94,7 +111,7 @@ def normalize_image(image, target_size=(512, 512)):
 def load_qr_code_data(target_size, encoder=None):
     """Infinite generator to create QR codes in memory without saving."""
     while True:
-        content, clean, dirty = generate_qr_code(repeats=3, max_sequence_length=encoder.max_sequence_length)  # Generate QR codes in memory
+        content, clean, dirty = generate_qr_code(target_size, repeats=3, max_sequence_length=encoder.max_sequence_length)  # Generate QR codes in memory
 
         # Encode the content before yielding
         encoded_content = encoder.encode(content)
@@ -127,7 +144,7 @@ def create_dataset(target_size=(512, 512), batch_size=32, shuffle=True, max_seq_
 
 
 if __name__ == '__main__':
-    target_size = (512, 512)  # Example target size for images
+    target_size = (256, 256)  # Example target size for images
     dataset = create_dataset(target_size=target_size, batch_size=32)
 
     for images, contents in dataset.take(1):  # Take one batch for example
