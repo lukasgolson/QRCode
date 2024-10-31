@@ -131,7 +131,11 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128):
 
     x = ExtractPatches(2)(x)
 
-    x = layers.Reshape((-1, patch_size[0] * patch_size[1] * x.shape[-1]))(x)
+    # reshape from 64, 64, 256 to 64x64, 256
+
+    x = layers.Reshape((x.shape[1] * x.shape[2], x.shape[3]))(x)
+
+
 
     # Get initial input length
 
@@ -156,7 +160,7 @@ def create_model(input_shape, max_sequence_length, num_chars):
 
     spatial_transformer = SpatialTransformer()(inputs)
 
-    x = create_cnn_architecture(spatial_transformer, 4, 128, 64)
+    x = create_cnn_architecture(spatial_transformer, 4, 64, 64)
 
     x = cnn_to_sequence(x, max_sequence_length, 128)
 

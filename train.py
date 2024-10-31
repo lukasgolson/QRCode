@@ -1,6 +1,9 @@
 import datetime
 import os
 
+os.environ["KERAS_BACKEND"] = "tensorflow"
+
+
 import keras
 import numpy as np
 import tensorflow as tf
