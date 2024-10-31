@@ -18,7 +18,7 @@ class SqueezeExcitation(Layer):
         self.channels = input_shape[-1]
         # Create two Dense layers for excitation
         self.dense1 = Dense(self.channels // self.ratio, activation='relu')
-        self.dense2 = Dense(self.channels, activation='mish', kernel_initializer="he_normal")
+        self.dense2 = Dense(self.channels, activation='mish')
 
     def call(self, inputs):
         # Squeeze: Global Average Pooling

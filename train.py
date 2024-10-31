@@ -2,7 +2,11 @@ import datetime
 import os
 import argparse
 
+import tensorflow
+
 os.environ["KERAS_BACKEND"] = "tensorflow"
+
+
 
 import keras
 import numpy as np
@@ -14,6 +18,11 @@ from tensorflow.keras.callbacks import TensorBoard
 from DataGenerator import QRDataGenerator
 from Dataset import create_dataset
 from Model import create_model
+
+
+tensorflow.keras.backend.clear_session(
+    free_memory=True
+)
 
 # Paths to directories
 image_dir = 'data/images'
