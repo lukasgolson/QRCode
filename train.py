@@ -4,7 +4,7 @@ import argparse
 
 import tensorflow
 
-os.environ["KERAS_BACKEND"] = "tensorflow"
+#os.environ["KERAS_BACKEND"] = "tensorflow"
 
 import keras
 import numpy as np

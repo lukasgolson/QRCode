@@ -128,7 +128,7 @@ def create_attention_module(input_tensor, heads=8, depth=1, dropout=0.1):
 
 
 # The idea is to turn individual pixels into a sequence of embeddings
-def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128, downsampled_size=64, use_cnn=True):
+def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128, downsampled_size=64, use_cnn=False):
     x = layers.BatchNormalization()(input_tensor)
 
     # eventually we might want to change this to patch extraction
