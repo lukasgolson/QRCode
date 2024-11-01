@@ -1,16 +1,13 @@
 import datetime
 import os
 import argparse
-from typing import Union, Dict, Any, Optional
 
 import tensorflow
 
-# os.environ["KERAS_BACKEND"] = "tensorflow"
 
 import keras
 import numpy as np
 import tensorflow as tf
-from keras.src.callbacks import Callback, LearningRateScheduler
 from keras.src.layers import layer
 from tensorflow.keras.callbacks import TensorBoard
 
@@ -80,18 +77,6 @@ def make_or_restore_model(max_sequence_length=512, num_chars=128, target_image_s
     if compile:
         return compile_model(model)
     return model
-
-
-def create_lr_scheduler(initial_lr, max_lr, min_lr, warmup_epochs, period_epochs):
-    def lr_scheduler(epoch, lr):
-        if epoch < warmup_epochs:
-            return initial_lr + (max_lr - initial_lr) * (epoch / warmup_epochs)
-        else:
-            cycle = np.floor(1 + (epoch - warmup_epochs) / period_epochs)
-            x = np.abs((epoch - warmup_epochs) / period_epochs - 2 * cycle + 1)
-            return min_lr + 0.5 * (max_lr - min_lr) * (1 + np.cos(np.pi * x))
-
-    return keras.callbacks.LearningRateScheduler(lr_scheduler)
 
 
 def run_training(epochs, headless_epochs=6, batch_size=16, total_items_per_epoch=16 * 500,

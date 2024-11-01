@@ -1,9 +1,8 @@
 import os
+
 import numpy as np
 import tensorflow as tf
 from PIL import Image
-from keras.src.utils import to_categorical
-from tqdm import tqdm
 
 from char_level_encoder import CharLevelEncoder
 

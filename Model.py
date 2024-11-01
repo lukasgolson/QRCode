@@ -1,14 +1,10 @@
-import numpy as np
 from keras import layers, Model
-from keras.src.layers import MultiHeadAttention, Conv2D, Add, Conv3D, Conv1D, Activation
-from tensorflow.keras.layers import Dropout, BatchNormalization, Dense
+from keras.src.layers import MultiHeadAttention, Conv2D, Add
+from tensorflow.keras.layers import Dropout, BatchNormalization
 
-from layers.Activations import Mish
 from layers.ExtractPatches import ExtractPatches
 from layers.PositionalEncoding import PositionalEncoding
-from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
-from layers.SqueezeExcitation import SqueezeExcitation
 
 activation = "relu"
 
@@ -66,7 +62,7 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
             if residual.shape[-1] != x.shape[-1]:
                 residual = Conv2D(x.shape[-1], (1, 1))(residual)
 
-            x = Add()([residual, x])
+            x = Add()([x, residual])
 
             x = layers.LeakyReLU()(x)
 

@@ -96,30 +96,33 @@ def normalize_image(image, target_size=(512, 512)):
     return np.array(image.convert('L')).reshape((target_size[0], target_size[1], 1)) / 255.0
 
 
-def load_qr_code_data(target_size, encoder=None):
-    """Infinite generator to create QR codes in memory without saving."""
+def load_qr_code_data(target_size, encoder=None, paired=False):
+    """Infinite generator to create QR codes in memory with paired or non-paired output."""
     while True:
-        content, clean, dirty = generate_qr_code(target_size, repeats=3,
-                                                 max_sequence_length=encoder.max_sequence_length)  # Generate QR codes in memory
+        content, clean, dirty = generate_qr_code(target_size, repeats=1,
+                                                 max_sequence_length=encoder.max_sequence_length)
 
-        # Encode the content before yielding
-        encoded_content = encoder.encode(content)
+        clean_img = normalize_image(clean, target_size)
+        dirty_img = normalize_image(dirty[0], target_size)  # Take the first dirty version
 
-        # Yield clean QR code and encoded content
-        yield normalize_image(clean, target_size), encoded_content
+        if paired:
+            # Yield (dirty_img, clean_img) for paired output
+            yield dirty_img, clean_img
+        else:
+            # Encode content for non-paired output
+            encoded_content = encoder.encode(content)
+            yield dirty_img, encoded_content
 
-        for dirty_img in dirty:
-            # Yield each dirty QR code and the same encoded content
-            yield normalize_image(dirty_img, target_size), encoded_content
 
-
-def create_dataset(target_size=(512, 512), batch_size=32, shuffle=True, max_seq_len=512, num_chars=128):
+def create_dataset(target_size=(512, 512), batch_size=32, shuffle=True, max_seq_len=512, num_chars=128, paired=False):
     encoder = CharLevelEncoder(max_sequence_length=max_seq_len, num_chars=num_chars)  # Initialize encoder
+
     dataset = tf.data.Dataset.from_generator(
-        lambda: load_qr_code_data(target_size, encoder=encoder),  # Pass encoder
+        lambda: load_qr_code_data(target_size, encoder=encoder, paired=paired),
         output_signature=(
-            tf.TensorSpec(shape=(target_size[0], target_size[1], 1), dtype=tf.float32),
-            tf.TensorSpec(shape=(max_seq_len, num_chars), dtype=tf.float32)
+            tf.TensorSpec(shape=(target_size[0], target_size[1], 1), dtype=tf.float32),  # X (dirty QR code)
+            tf.TensorSpec(shape=(target_size[0], target_size[1], 1), dtype=tf.float32) if paired else
+            tf.TensorSpec(shape=(max_seq_len, num_chars), dtype=tf.float32)  # Y (clean QR code or encoded content)
         )
     )
 
@@ -127,7 +130,7 @@ def create_dataset(target_size=(512, 512), batch_size=32, shuffle=True, max_seq_
         dataset = dataset.shuffle(buffer_size=250)
 
     dataset = dataset.batch(batch_size, drop_remainder=True)
-#    dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
+    #    dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
 
     return dataset
 
