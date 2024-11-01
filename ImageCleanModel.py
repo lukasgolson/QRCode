@@ -6,6 +6,7 @@ import tensorflow as tf
 from keras import backend as K
 
 import Dataset
+from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
 
 
@@ -18,6 +19,8 @@ def create_model(input_shape):
 
     # Encoder: A series of convolutional layers to process the noisy input image
     x = layers.Conv2D(64, 3, activation='relu', padding='same')(x)
+
+    x = SpatialAttention()(x)
 
     # Final convolution to output a single-channel image, corrected version of input
     output = layers.Conv2D(1, 1, activation='sigmoid', padding='same')(x)
@@ -42,7 +45,7 @@ def combined_mse_ssim_loss(y_true, y_pred, alpha=0.5, beta=0.5):
     return alpha * mse + beta * ssim
 
 
-def train_model(resolution=256, epochs=10):
+def train_model(resolution=256, epochs=100):
     strategy = tf.distribute.MirroredStrategy()
 
     # Create the model
