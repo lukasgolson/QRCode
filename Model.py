@@ -47,8 +47,8 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
 
     for i in range(length):
         if i % attention_frequency == 0:
-            #x = SqueezeExcitation(use_residual=True)(x)
-            #x = SpatialAttention(use_residual=True)(x)
+            # x = SqueezeExcitation(use_residual=True)(x)
+            # x = SpatialAttention(use_residual=True)(x)
             x = x
 
         # Calculate the current number of channels
@@ -71,7 +71,6 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
             x = Conv2D(current_channels, (1, 1), strides=(2, 2), padding='same', activation=None)(x)
 
         current_channels = min(current_channels * (2 ** i), max_channels)
-
 
     return x
 
@@ -129,35 +128,36 @@ def create_attention_module(input_tensor, heads=8, depth=1, dropout=0.1):
 
 
 # The idea is to turn individual pixels into a sequence of embeddings
-def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128, downsampled_size=64):
+def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128, downsampled_size=64, use_cnn=True):
     x = layers.BatchNormalization()(input_tensor)
 
     # eventually we might want to change this to patch extraction
 
     x = layers.Conv2D(x.shape[-1], (1, 1), padding='same', activation='mish')(x)
 
-    # get x size and y size
-    x_size = x.shape[1]
-    y_size = x.shape[2]
+    if use_cnn:
+        x = layers.Reshape((x.shape[1] * x.shape[2], x.shape[3]))(x)
 
-    size = max(x_size, y_size)
+        x = layers.Conv1D(filters=feature_length, kernel_size=1, padding='valid')(x)
+    else:
+        # get x size and y size
+        x_size = x.shape[1]
+        y_size = x.shape[2]
 
-    # get the stride size necessary to reduce to 64X64
-    stride_size = size // downsampled_size
+        size = max(x_size, y_size)
 
-    # if stride size is 0, set patch and stride to not downsample
-    if stride_size == 0:
-        stride_size = 1
+        # get the stride size necessary to reduce to 64X64
+        stride_size = size // downsampled_size
 
-    x = ExtractPatches(stride_size=(stride_size, stride_size), patch_size=(stride_size, stride_size))(x)
+        # if stride size is 0, set patch and stride to not downsample
+        if stride_size < 1:
+            stride_size = 1
 
-    # reshape from 64, 64, 256 to 64x64, 256
+        x = ExtractPatches(stride_size=(stride_size, stride_size), patch_size=(stride_size, stride_size))(x)
 
-    x = layers.Reshape((x.shape[1] * x.shape[2], x.shape[3]))(x)
+        # reshape from 64, 64, 256 to 64x64, 256
 
-    # Get initial input length
-
-    x = layers.TimeDistributed(layers.Dense(feature_length, activation="mish"))(x)
+        x = layers.Reshape((x.shape[1] * x.shape[2], x.shape[3]))(x)
 
     input_length = x.shape[1]
     while input_length > max_sequence_length:
@@ -166,6 +166,8 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128, d
                           strides=2, padding='valid')(x)
 
         input_length = x.shape[1]
+
+    x = layers.TimeDistributed(layers.Dense(feature_length, activation="mish"))(x)
 
     x = PositionalEncoding()(x)
 

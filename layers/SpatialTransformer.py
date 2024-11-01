@@ -1,4 +1,3 @@
-import keras.backend as tf
 import keras
 import tensorflow as tf
 from keras import Layer

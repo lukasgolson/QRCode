@@ -1,6 +1,5 @@
 import keras
 from keras.layers import Conv2D, Multiply, Activation, Add, BatchNormalization, Concatenate
-from keras import layers
 
 
 @keras.saving.register_keras_serializable(package="qr_model", name="SpatialAttention")
