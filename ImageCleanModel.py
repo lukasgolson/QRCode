@@ -52,15 +52,18 @@ def combined_mse_ssim_loss(y_true, y_pred, alpha=0.5, beta=0.5):
 
 
 def train_model(resolution=256, epochs=10):
+    strategy = tf.distribute.MirroredStrategy()
+
     # Create the model
     input_shape = (resolution, resolution, 1)
 
-    model = create_model(input_shape)
+    with strategy.scope():
+        model = create_model(input_shape)
 
-    dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution))
+        dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution))
 
-    # Compile the model
-    model.compile(optimizer='adam', loss=combined_mse_ssim_loss, metrics=[ssim_loss])
+        # Compile the model
+        model.compile(optimizer='adam', loss=combined_mse_ssim_loss, metrics=[ssim_loss])
 
     # Train the model
     model.fit(dataset, epochs=epochs, steps_per_epoch=250)

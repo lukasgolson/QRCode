@@ -72,7 +72,7 @@ def generate_random_data(population=None, max_length=300):
     return content
 
 
-def generate_qr_code(target_size, repeats=3, max_sequence_length=500):
+def generate_qr_code(repeats=3, max_sequence_length=500):
     """Generate a QR code and return its index for reference."""
     content_length = random.randint(0, max_sequence_length)
 
@@ -99,7 +99,7 @@ def normalize_image(image, target_size=(512, 512)):
 def load_qr_code_data(target_size, encoder=None, paired=False):
     """Infinite generator to create QR codes in memory with paired or non-paired output."""
     while True:
-        content, clean, dirty = generate_qr_code(target_size, repeats=1,
+        content, clean, dirty = generate_qr_code(repeats=1,
                                                  max_sequence_length=encoder.max_sequence_length)
 
         clean_img = normalize_image(clean, target_size)
@@ -111,6 +111,7 @@ def load_qr_code_data(target_size, encoder=None, paired=False):
         else:
             # Encode content for non-paired output
             encoded_content = encoder.encode(content)
+            yield clean_img, encoded_content
             yield dirty_img, encoded_content
 
 
