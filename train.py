@@ -35,7 +35,7 @@ gpus = tf.config.list_physical_devices('GPU')
 print(f"GPUs: {gpus}")
 
 
-#@tf.function
+# @tf.function
 @keras.saving.register_keras_serializable()
 def masked_categorical_crossentropy(y_true, y_pred):
     # Compute masked categorical crossentropy loss.
@@ -94,10 +94,6 @@ def create_lr_scheduler(initial_lr, max_lr, min_lr, warmup_epochs, period_epochs
     return keras.callbacks.LearningRateScheduler(lr_scheduler)
 
 
-
-
-
-
 def run_training(epochs, headless_epochs=6, batch_size=16, total_items_per_epoch=16 * 500,
                  gradient_accumulation_steps=None, max_sequence_length=512
                  , num_chars=128, target_image_size=512, built_in_generator=True):
@@ -140,10 +136,10 @@ def run_training(epochs, headless_epochs=6, batch_size=16, total_items_per_epoch
         model.summary()
         model.save(os.path.join(save_path, f'qr_model_empty_{date}.keras'))
         freeze_layer(model, 'spatial_transformer', frozen=True, recompile=True)
-        model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=headless_epochs, callbacks=callbacks)
+        model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=headless_epochs, callbacks=callbacks, verbose=2)
         freeze_layer(model, 'spatial_transformer', frozen=False, recompile=True)
         model.fit(dataset, steps_per_epoch=steps_per_epoch, epochs=epochs, callbacks=callbacks,
-                  initial_epoch=headless_epochs)
+                  initial_epoch=headless_epochs, verbose=2)
 
     model.save(os.path.join(save_path, f'qr_model_{date}.keras'))
 
