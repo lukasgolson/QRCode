@@ -180,13 +180,13 @@ def create_model(input_shape, max_sequence_length, num_chars):
 
     spatial_transformer = SpatialTransformer()(inputs)
 
-    x = create_cnn_architecture(spatial_transformer, 4, 64, 64)
+    x = create_cnn_architecture(spatial_transformer, 4, 128, 64)
 
     x = cnn_to_sequence(x, max_sequence_length, 128, 64)
 
-    # x = create_attention_module(x, 8, 4)
+    x = create_attention_module(x, 4, 8)
 
-    x = create_dense_architecture(x, num_chars, 1, 0.1)
+    #x = create_dense_architecture(x, num_chars, 1, 0.1)
 
     outputs = layers.TimeDistributed(layers.Dense(num_chars, activation='softmax'))(x)
 

@@ -33,7 +33,7 @@ if not os.path.exists(checkpoint_dir):
 gpus = tf.config.list_physical_devices('GPU')
 print(f"GPUs: {gpus}")
 
-
+@tf.function
 @keras.saving.register_keras_serializable()
 def masked_categorical_crossentropy(y_true, y_pred):
     # Compute masked categorical crossentropy loss.
@@ -59,9 +59,9 @@ def get_model(max_sequence_length=512, num_chars=128, target_image_size=512):
 
 
 def compile_model(model):
-    optimizer = tf.keras.optimizers.Adafactor()
+    optimizer = tf.keras.optimizers.Adafactor(clipnorm=1.0, learning_rate=1)
     model.compile(optimizer=optimizer, loss=masked_categorical_crossentropy,
-                  metrics=['accuracy', 'precision', 'recall'], jit_compile=JIT_COMPILE, run_eagerly=RUN_EAGERLY)
+                  metrics=['accuracy'], jit_compile=JIT_COMPILE, run_eagerly=RUN_EAGERLY)
     return model
 
 
