@@ -1,5 +1,6 @@
 import keras
 from keras.layers import Conv2D, Multiply, Activation, Add, BatchNormalization, Concatenate
+from keras.src.ops import LeakyRelu
 
 
 @keras.saving.register_keras_serializable(package="qr_model", name="SpatialAttention")
@@ -21,15 +22,17 @@ class SpatialAttention(keras.layers.Layer):
         """
         super(SpatialAttention, self).__init__(**kwargs)
         # Initialize layers in __init__
-        self.conv1 = Conv2D(filters=1, kernel_size=2, padding='same', activation='relu', name='conv1')
-        self.conv2 = Conv2D(filters=1, kernel_size=3, padding='same', activation='relu', name='conv2')
-        self.conv3 = Conv2D(filters=1, kernel_size=5, padding='same', activation='relu', name='conv3')
-
+        self.conv1 = Conv2D(filters=1, kernel_size=2, padding='same', name='conv1')
+        self.activation1 = LeakyRelu()
+        self.conv2 = Conv2D(filters=1, kernel_size=3, padding='same', name='conv2')
+        self.activation2 = LeakyRelu()
+        self.conv3 = Conv2D(filters=1, kernel_size=5, padding='same', name='conv3')
+        self.activation3 = LeakyRelu()
         self.conv_pooling = None
 
         self.concatenate = Concatenate(axis=-1)
         self.batch_norm = BatchNormalization(name='batch_norm')
-        self.activation = Activation('relu', name='activation')  # 'mish' can be defined if not available in Keras
+        self.residual_activation = LeakyRelu()
         self.use_residual = use_residual
 
     def build(self, input_shape):
@@ -62,9 +65,8 @@ class SpatialAttention(keras.layers.Layer):
         if self.use_residual:
             self.batch_norm.build(conv_pooling_shape)
 
-            batch_norm_shape = self.batch_norm.compute_output_shape(conv_pooling_shape)
 
-            self.activation.build(batch_norm_shape)
+
 
         super(SpatialAttention, self).build(input_shape)
 
@@ -82,8 +84,13 @@ class SpatialAttention(keras.layers.Layer):
         """
         # Compute attention maps using convolutional operations
         attention_map1 = self.conv1(inputs)
+        attention_map1 = self.activation1(attention_map1)
+
         attention_map2 = self.conv2(inputs)
+        attention_map2 = self.activation2(attention_map2)
+
         attention_map3 = self.conv3(inputs)
+        attention_map3 = self.activation3(attention_map3)
 
         # Concatenate the attention maps along the channel axis
         x = self.concatenate([attention_map1, attention_map2, attention_map3])
@@ -100,7 +107,7 @@ class SpatialAttention(keras.layers.Layer):
 
             # Apply batch normalization and activation
             x = self.batch_norm(x)
-            x = self.activation(x)
+            x = self.residual_activation(x)
 
         return x
 
