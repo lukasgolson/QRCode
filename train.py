@@ -1,10 +1,11 @@
 import datetime
 import os
 import argparse
+from typing import Union, Dict, Any, Optional
 
 import tensorflow
 
-#os.environ["KERAS_BACKEND"] = "tensorflow"
+# os.environ["KERAS_BACKEND"] = "tensorflow"
 
 import keras
 import numpy as np
@@ -33,7 +34,8 @@ if not os.path.exists(checkpoint_dir):
 gpus = tf.config.list_physical_devices('GPU')
 print(f"GPUs: {gpus}")
 
-@tf.function
+
+#@tf.function
 @keras.saving.register_keras_serializable()
 def masked_categorical_crossentropy(y_true, y_pred):
     # Compute masked categorical crossentropy loss.
@@ -59,7 +61,7 @@ def get_model(max_sequence_length=512, num_chars=128, target_image_size=512):
 
 
 def compile_model(model):
-    optimizer = tf.keras.optimizers.Adafactor(clipnorm=1.0, learning_rate=1.0)
+    optimizer = tf.keras.optimizers.Adafactor(clipnorm=1.0, learning_rate=1.0, weight_decay=0.0001)
     model.compile(optimizer=optimizer, loss=masked_categorical_crossentropy,
                   metrics=['accuracy'], jit_compile=JIT_COMPILE, run_eagerly=RUN_EAGERLY)
     return model
@@ -90,6 +92,10 @@ def create_lr_scheduler(initial_lr, max_lr, min_lr, warmup_epochs, period_epochs
             return min_lr + 0.5 * (max_lr - min_lr) * (1 + np.cos(np.pi * x))
 
     return keras.callbacks.LearningRateScheduler(lr_scheduler)
+
+
+
+
 
 
 def run_training(epochs, headless_epochs=6, batch_size=16, total_items_per_epoch=16 * 500,
