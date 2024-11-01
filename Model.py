@@ -12,6 +12,7 @@ from layers.SqueezeExcitation import SqueezeExcitation
 
 activation = "relu"
 
+
 def calculate_downscale_frequency(length, min_resolution, max_resolution):
     # Calculate total downscales possible
     total_downscales = 0
@@ -42,7 +43,8 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
     # Calculate downscale frequency
     downscale_frequency = calculate_downscale_frequency(length, min_resolution, current_height)
 
-    x = layers.Conv2D(3, (1, 1), padding='same', activation=activation)(x)
+    x = layers.Conv2D(3, (1, 1), padding='same')(x)
+    x = layers.LeakyReLU()(x)
 
     current_channels = x.shape[-1]
 
@@ -56,7 +58,8 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
 
         residual = x
 
-        x = Conv2D(current_channels, (3, 3), padding='same', activation=activation)(x)
+        x = Conv2D(current_channels, (3, 3), padding='same')(x)
+        x = layers.LeakyReLU()(x)
 
         if use_residual:
             # Ensure the residual has the same number of channels
@@ -65,11 +68,13 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
 
             x = Add()([residual, x])
 
-            x = Activation(activation)(x)
+            x = layers.LeakyReLU()(x)
+
             x = BatchNormalization()(x)
 
         if downscale_frequency > 0 and i % downscale_frequency == 0 and i > 0:
-            x = Conv2D(current_channels, (1, 1), strides=(2, 2), padding='same', activation=activation)(x)
+            x = Conv2D(current_channels, (1, 1), strides=(2, 2), padding='same')(x)
+            x = layers.LeakyReLU()(x)
 
         current_channels = min(current_channels * (2 ** i), max_channels)
 
@@ -85,7 +90,9 @@ def create_dense_architecture(input_tensor, units=512, depth=3, dropout=0.1):
         residual = x
 
         # Apply dense layer with a constant number of units
-        x = layers.Dense(units, activation=activation, )(x)
+        x = layers.Dense(units)(x)
+        x = layers.LeakyReLU()(x)
+
         x = Dropout(dropout)(x)
 
         # Add residual connection after the first layer
@@ -93,7 +100,8 @@ def create_dense_architecture(input_tensor, units=512, depth=3, dropout=0.1):
             x = layers.Add()([x, residual])  # Residual connection
 
         # Apply normalization and activation after the add operation
-        x = layers.Activation(activation)(x)  # activation is applied here
+        x = layers.LeakyReLU()(x)
+
 
         x = layers.BatchNormalization()(x)
 
@@ -116,12 +124,16 @@ def create_attention_module(input_tensor, heads=8, depth=1, dropout=0.1):
 
         residual_2 = x
 
-        x = layers.Dense(x.shape[-1], activation=activation)(x)
+        x = layers.Dense(x.shape[-1])(x)
+        x = layers.LeakyReLU()(x)
+
         x = Dropout(dropout)(x)
         x = layers.Dense(x.shape[-1])(x)
 
+
         x = layers.Add()([x, residual_2])
-        x = layers.Activation(activation)(x)
+        x = layers.LeakyReLU()(x)
+
 
         x = layers.BatchNormalization()(x)
 
@@ -134,7 +146,9 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128, d
 
     # eventually we might want to change this to patch extraction
 
-    x = layers.Conv2D(x.shape[-1], (1, 1), padding='same', activation=activation)(x)
+    x = layers.Conv2D(x.shape[-1], (1, 1), padding='same')(x)
+    x = layers.LeakyReLU()(x)
+
 
     if use_cnn:
         x = layers.Reshape((x.shape[1] * x.shape[2], x.shape[3]))(x)
@@ -168,7 +182,8 @@ def cnn_to_sequence(input_tensor, max_sequence_length=512, feature_length=128, d
 
         input_length = x.shape[1]
 
-    x = layers.TimeDistributed(layers.Dense(feature_length, activation=activation))(x)
+    x = layers.TimeDistributed(layers.Dense(feature_length))(x)
+    x = layers.LeakyReLU()(x)
 
     x = PositionalEncoding()(x)
 
@@ -181,13 +196,13 @@ def create_model(input_shape, max_sequence_length, num_chars):
 
     spatial_transformer = SpatialTransformer()(inputs)
 
-    x = create_cnn_architecture(spatial_transformer, 4, 128, 64)
+    x = create_cnn_architecture(spatial_transformer, 8, 128, 64)
 
     x = cnn_to_sequence(x, max_sequence_length, 128, 64)
 
     x = create_attention_module(x, 4, 8)
 
-    #x = create_dense_architecture(x, num_chars, 1, 0.1)
+    # x = create_dense_architecture(x, num_chars, 1, 0.1)
 
     outputs = layers.TimeDistributed(layers.Dense(num_chars, activation='softmax'))(x)
 

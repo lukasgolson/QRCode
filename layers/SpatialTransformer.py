@@ -1,7 +1,7 @@
 import keras
 import tensorflow as tf
 from keras import Layer
-from keras.src.layers import Conv2D, Flatten, Dense, Reshape
+from keras.src.layers import Conv2D, Flatten, Dense, Reshape, LeakyReLU
 
 
 class SpatialTransformer(Layer):
@@ -15,11 +15,15 @@ class SpatialTransformer(Layer):
 
         # Define the localization networtf
         self.localization_network = keras.Sequential([
-            Conv2D(8, (3, 3), strides=(2, 2), activation='relu', padding='valid'),
-            Conv2D(8, (3, 3), strides=(2, 2), activation='relu', padding='valid'),
-            Conv2D(8, (1, 1), strides=(2, 2), activation='relu', padding='valid'),
+            Conv2D(8, (3, 3), strides=(2, 2), padding='valid'),
+            LeakyReLU(),
+            Conv2D(8, (3, 3), strides=(2, 2), padding='valid'),
+            LeakyReLU(),
+            Conv2D(8, (1, 1), strides=(2, 2), padding='valid'),
+            LeakyReLU(),
             Flatten(),
-            Dense(50, activation='relu'),
+            Dense(50, ),
+            LeakyReLU(),
             Dense(6, activation='linear', kernel_initializer='zeros',
                   bias_initializer=tf.constant_initializer([1, 0, 0, 0, 1, 0]))
             # Identity transformation initialization
