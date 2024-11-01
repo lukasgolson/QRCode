@@ -14,8 +14,9 @@ class SqueezeExcitation(Layer):
         self.ratio = ratio
         self.use_residual = use_residual
 
-        self.batch_norm = BatchNormalization(name='batch_norm')
-        self.activation = Activation('mish', name='activation')  # 'mish' can be defined if not available in Keras
+        if self.use_residual:
+            self.batch_norm = BatchNormalization(name='batch_norm')
+            self.activation = Activation('mish', name='activation')  # 'mish' can be defined if not available in Keras
 
     def build(self, input_shape):
         # Define the number of channels

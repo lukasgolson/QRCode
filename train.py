@@ -6,8 +6,6 @@ import tensorflow
 
 os.environ["KERAS_BACKEND"] = "tensorflow"
 
-
-
 import keras
 import numpy as np
 import tensorflow as tf
@@ -18,7 +16,6 @@ from tensorflow.keras.callbacks import TensorBoard
 from DataGenerator import QRDataGenerator
 from Dataset import create_dataset
 from Model import create_model
-
 
 tensorflow.keras.backend.clear_session(
     free_memory=True
@@ -64,7 +61,7 @@ def get_model(max_sequence_length=512, num_chars=128, target_image_size=512):
 def compile_model(model):
     optimizer = tf.keras.optimizers.Adafactor()
     model.compile(optimizer=optimizer, loss=masked_categorical_crossentropy,
-                  metrics=['accuracy', 'precision', 'recall'], jit_compile=JIT_COMPILE)
+                  metrics=['accuracy', 'precision', 'recall'], jit_compile=JIT_COMPILE, run_eagerly=RUN_EAGERLY)
     return model
 
 
@@ -97,8 +94,7 @@ def create_lr_scheduler(initial_lr, max_lr, min_lr, warmup_epochs, period_epochs
 
 def run_training(epochs, headless_epochs=6, batch_size=16, total_items_per_epoch=16 * 500,
                  gradient_accumulation_steps=None, max_sequence_length=512
-                 , num_chars=128, target_image_size=512):
-
+                 , num_chars=128, target_image_size=512, built_in_generator=True):
     print("Running training with the following parameters:")
     print(f"Epochs: {epochs}")
     print(f"Batch size: {batch_size}")
@@ -108,6 +104,7 @@ def run_training(epochs, headless_epochs=6, batch_size=16, total_items_per_epoch
     print(f"Number of characters: {num_chars}")
     print(f"Target image size: {target_image_size}")
     print(f"JIT compilation: {JIT_COMPILE}")
+    print(f"Eager execution: {RUN_EAGERLY}")
 
     steps_per_epoch = total_items_per_epoch // batch_size
     strategy = tf.distribute.MirroredStrategy()
@@ -120,8 +117,12 @@ def run_training(epochs, headless_epochs=6, batch_size=16, total_items_per_epoch
         keras.callbacks.ModelCheckpoint(filepath=checkpoint_dir + "/ckpt-{epoch}.keras", save_freq="epoch")
     ]
 
-    dataset = create_dataset(target_size=(target_image_size, target_image_size),
-                             batch_size=batch_size, shuffle=False, max_seq_len=max_sequence_length, num_chars=num_chars)
+    if built_in_generator:
+        dataset = create_dataset(target_size=(target_image_size, target_image_size),
+                                 batch_size=batch_size, shuffle=False, max_seq_len=max_sequence_length,
+                                 num_chars=num_chars)
+    else:
+        dataset = QRDataGenerator(batch_size, max_sequence_length, num_chars, target_image_size)
     print("Created data generator")
     save_path = 'models'
     os.makedirs(save_path, exist_ok=True)
@@ -141,19 +142,31 @@ def run_training(epochs, headless_epochs=6, batch_size=16, total_items_per_epoch
     model.save(os.path.join(save_path, f'qr_model_{date}.keras'))
 
 
+JIT_COMPILE = False
+RUN_EAGERLY = False
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run QR Code model training.")
     parser.add_argument("--epochs", type=int, default=48, help="Number of epochs to run training.")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size for training.")
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=None, help="Number of steps to accumulate gradients.")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=None,
+                        help="Number of steps to accumulate gradients.")
     parser.add_argument("--target_image_size", type=int, default=512, help="Size of the target image.")
     parser.add_argument("--max_sequence_length", type=int, default=512, help="Maximum sequence length.")
-    parser.add_argument("-JIT", nargs="?", default=False, const=True, type=bool, help="Enable Just-In-Time compilation.")
+    parser.add_argument("-JIT", nargs="?", default=False, const=True, type=bool,
+                        help="Enable Just-In-Time compilation.")
+    parser.add_argument("-EAGER", nargs="?", default=False, const=True, type=bool,
+                        help="Enable eager run-time.")
 
-    global JIT_COMPILE
+    parser.add_argument("-EXTERN_DATA", nargs="?", default=False, const=True, type=bool,
+                        help="Use external data generator.")
+
     JIT_COMPILE = parser.parse_args().JIT
+    RUN_EAGERLY = parser.parse_args().EAGER
 
     args = parser.parse_args()
-    run_training(epochs=args.epochs, batch_size=args.batch_size, gradient_accumulation_steps=args.gradient_accumulation_steps,
-                 total_items_per_epoch=args.batch_size * 500, max_sequence_length=args.max_sequence_length, target_image_size=args.target_image_size)
+    run_training(epochs=args.epochs, batch_size=args.batch_size,
+                 gradient_accumulation_steps=args.gradient_accumulation_steps,
+                 total_items_per_epoch=args.batch_size * 500, max_sequence_length=args.max_sequence_length,
+                 target_image_size=args.target_image_size, built_in_generator=True)
     print("Training complete.")
