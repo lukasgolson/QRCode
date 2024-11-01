@@ -100,7 +100,7 @@ def create_dense_architecture(input_tensor, units=512, depth=3, dropout=0.1):
             x = layers.Add()([x, residual])  # Residual connection
 
         # Apply normalization and activation after the add operation
-        x = layers.LeakyReLU()(x)
+            x = layers.LeakyReLU()(x)
 
 
         x = layers.BatchNormalization()(x)

@@ -22,7 +22,7 @@ class SpatialTransformer(Layer):
             Conv2D(8, (1, 1), strides=(2, 2), padding='valid'),
             LeakyReLU(),
             Flatten(),
-            Dense(50, ),
+            Dense(50),
             LeakyReLU(),
             Dense(6, activation='linear', kernel_initializer='zeros',
                   bias_initializer=tf.constant_initializer([1, 0, 0, 0, 1, 0]))
