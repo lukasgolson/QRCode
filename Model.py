@@ -37,7 +37,6 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
                             use_residual=True):
     x = input_tensor
     current_height = input_tensor.shape[1]  # Current height of the input image
-    current_channels = input_tensor.shape[-1]
 
     # Calculate downscale frequency
     downscale_frequency = calculate_downscale_frequency(length, min_resolution, current_height)
@@ -48,8 +47,9 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
 
     for i in range(length):
         if i % attention_frequency == 0:
-            x = SqueezeExcitation(use_residual=True)(x)
-            x = SpatialAttention(use_residual=True)(x)
+            #x = SqueezeExcitation(use_residual=True)(x)
+            #x = SpatialAttention(use_residual=True)(x)
+            x = x
 
         # Calculate the current number of channels
 
