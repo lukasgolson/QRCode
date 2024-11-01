@@ -21,15 +21,15 @@ class SpatialAttention(keras.layers.Layer):
         """
         super(SpatialAttention, self).__init__(**kwargs)
         # Initialize layers in __init__
-        self.conv1 = Conv2D(filters=1, kernel_size=2, padding='same', activation='mish', name='conv1')
-        self.conv2 = Conv2D(filters=1, kernel_size=3, padding='same', activation='mish', name='conv2')
-        self.conv3 = Conv2D(filters=1, kernel_size=5, padding='same', activation='mish', name='conv3')
+        self.conv1 = Conv2D(filters=1, kernel_size=2, padding='same', activation='relu', name='conv1')
+        self.conv2 = Conv2D(filters=1, kernel_size=3, padding='same', activation='relu', name='conv2')
+        self.conv3 = Conv2D(filters=1, kernel_size=5, padding='same', activation='relu', name='conv3')
 
         self.conv_pooling = None
 
         self.concatenate = Concatenate(axis=-1)
         self.batch_norm = BatchNormalization(name='batch_norm')
-        self.activation = Activation('mish', name='activation')  # 'mish' can be defined if not available in Keras
+        self.activation = Activation('relu', name='activation')  # 'mish' can be defined if not available in Keras
         self.use_residual = use_residual
 
     def build(self, input_shape):

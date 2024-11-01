@@ -16,13 +16,13 @@ class SqueezeExcitation(Layer):
 
         if self.use_residual:
             self.batch_norm = BatchNormalization(name='batch_norm')
-            self.activation = Activation('mish', name='activation')  # 'mish' can be defined if not available in Keras
+            self.activation = Activation('relu', name='activation')  # 'mish' can be defined if not available in Keras
 
     def build(self, input_shape):
         # Define the number of channels
         self.channels = input_shape[-1]
         # Create two Dense layers for excitation
-        self.dense1 = Dense(self.channels // self.ratio, activation='mish')
+        self.dense1 = Dense(self.channels // self.ratio, activation='relu')
         self.dense2 = Dense(self.channels, activation='sigmoid')
 
         if self.use_residual:
