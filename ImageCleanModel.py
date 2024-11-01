@@ -18,15 +18,6 @@ def create_model(input_shape):
 
     # Encoder: A series of convolutional layers to process the noisy input image
     x = layers.Conv2D(64, 3, activation='relu', padding='same')(x)
-    x = layers.Conv2D(128, 3, activation='relu', padding='same')(x)
-    x = layers.Conv2D(256, 3, activation='relu', padding='same')(x)
-
-    # Bottleneck layer for feature extraction
-    x = layers.Conv2D(256, 3, activation='relu', padding='same')(x)
-
-    # Decoder: Upsample and reconstruct the "cleaned" version of the image
-    x = layers.Conv2DTranspose(128, 3, activation='relu', padding='same')(x)
-    x = layers.Conv2DTranspose(64, 3, activation='relu', padding='same')(x)
 
     # Final convolution to output a single-channel image, corrected version of input
     output = layers.Conv2D(1, 1, activation='sigmoid', padding='same')(x)
