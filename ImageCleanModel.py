@@ -41,6 +41,8 @@ def create_model(input_shape):
 
     x = decoder(x)
 
+    x = layers.Conv2D(1, 1, activation='sigmoid', padding='same')(x)
+
 
 
     # Define the model
