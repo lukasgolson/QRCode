@@ -12,7 +12,7 @@ from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
 
 def encoder(x):
-    for filters in [64, 128, 256]:
+    for filters in [16, 32, 64]:
         x = layers.Conv2D(filters, 3, activation='relu', padding='same')(x)
         x = layers.BatchNormalization()(x)
         x = layers.MaxPooling2D(pool_size=(2, 2))(x)
@@ -20,7 +20,7 @@ def encoder(x):
 
 
 def decoder(x):
-    for filters in [256, 128, 64]:
+    for filters in [64, 32, 16]:
         x = layers.UpSampling2D(size=(2, 2))(x)
         x = layers.Conv2D(filters, 3, padding='same', activation='relu')(x)
         x = layers.BatchNormalization()(x)
