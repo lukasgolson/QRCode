@@ -1,6 +1,7 @@
 import keras
 from keras.layers import Conv2D, Multiply, Activation, Add, BatchNormalization, Concatenate
-from keras.src.ops import LeakyRelu
+from keras.src.activations import relu
+from keras.src.ops import relu
 
 
 @keras.saving.register_keras_serializable(package="qr_model", name="SpatialAttention")
@@ -21,18 +22,19 @@ class SpatialAttention(keras.layers.Layer):
             **kwargs: Additional keyword arguments passed to the parent class.
         """
         super(SpatialAttention, self).__init__(**kwargs)
+
         # Initialize layers in __init__
         self.conv1 = Conv2D(filters=1, kernel_size=2, padding='same', name='conv1')
-        self.activation1 = LeakyRelu()
+        self.activation1 = relu()
         self.conv2 = Conv2D(filters=1, kernel_size=3, padding='same', name='conv2')
-        self.activation2 = LeakyRelu()
+        self.activation2 = relu()
         self.conv3 = Conv2D(filters=1, kernel_size=5, padding='same', name='conv3')
-        self.activation3 = LeakyRelu()
+        self.activation3 = relu()
         self.conv_pooling = None
 
         self.concatenate = Concatenate(axis=-1)
         self.batch_norm = BatchNormalization(name='batch_norm')
-        self.residual_activation = LeakyRelu()
+        self.residual_activation = relu()
         self.use_residual = use_residual
 
     def build(self, input_shape):
@@ -64,9 +66,6 @@ class SpatialAttention(keras.layers.Layer):
 
         if self.use_residual:
             self.batch_norm.build(conv_pooling_shape)
-
-
-
 
         super(SpatialAttention, self).build(input_shape)
 
