@@ -1,3 +1,5 @@
+import argparse
+
 import keras
 from keras import Model
 from keras.src import layers
@@ -64,7 +66,7 @@ def combined_mse_ssim_loss(y_true, y_pred, alpha=0.5, beta=0.5):
     return alpha * mse + beta * ssim
 
 
-def train_model(resolution=256, epochs=100):
+def train_model(resolution=256, epochs=100, batch_size=64):
     strategy = tf.distribute.MirroredStrategy()
 
 
@@ -90,7 +92,7 @@ def train_model(resolution=256, epochs=100):
 
         model = create_model(input_shape)
 
-        dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution))
+        dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
 
         # Compile the model
         model.compile(optimizer=optimizer, loss=combined_mse_ssim_loss, metrics=[ssim_loss])
@@ -105,4 +107,11 @@ def train_model(resolution=256, epochs=100):
 
 
 if __name__ == '__main__':
-    train_model()
+
+    # get batch size argument
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--batch_size", type=int, default=64)
+
+    batch_size = parser.parse_args().batch_size
+
+    train_model(batch_size=batch_size)
