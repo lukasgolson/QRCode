@@ -4,6 +4,7 @@ from keras.src import layers
 
 import tensorflow as tf
 from keras import backend as K
+from tensorflow.python.keras.callbacks import TensorBoard
 
 import Dataset
 from layers.SpatialAttention import SpatialAttention
@@ -51,6 +52,11 @@ def train_model(resolution=256, epochs=100):
     # Create the model
     input_shape = (resolution, resolution, 1)
 
+
+    callbacks = [
+        TensorBoard(log_dir="image_clean", histogram_freq=1, write_graph=True, write_images=False, update_freq=500),
+    ]
+
     with strategy.scope():
         model = create_model(input_shape)
 
@@ -60,7 +66,7 @@ def train_model(resolution=256, epochs=100):
         model.compile(optimizer='adam', loss=combined_mse_ssim_loss, metrics=[ssim_loss])
 
     # Train the model
-    model.fit(dataset, epochs=epochs, steps_per_epoch=250)
+    model.fit(dataset, epochs=epochs, steps_per_epoch=250, callbacks=callbacks)
 
     # Save the model
     model.save('qr_correction_model.keras')
