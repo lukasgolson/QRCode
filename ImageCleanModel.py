@@ -79,7 +79,7 @@ def train_model(resolution=256, epochs=100, batch_size=64):
                         update_freq='epoch'),
             ModelCheckpoint(
                 filepath='best_model.keras',  # Path to save the model
-                monitor='val_loss',  # Metric to monitor
+                monitor='loss',  # Metric to monitor
                 save_best_only=True,  # Only save the best model
                 mode='min',  # Save the model with the minimum loss
                 verbose=1  # Print messages when the model is saved
@@ -100,7 +100,7 @@ def train_model(resolution=256, epochs=100, batch_size=64):
         model.summary()
 
         # Train the model
-        model.fit(dataset, epochs=epochs, steps_per_epoch=250, callbacks=callbacks, validation_data=dataset)
+        model.fit(dataset, epochs=epochs, steps_per_epoch=250, callbacks=callbacks)
 
     # Save the model
     model.save('qr_correction_model.keras')
