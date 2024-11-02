@@ -4,6 +4,7 @@ from keras.src import layers
 
 import tensorflow as tf
 from keras import backend as K
+from keras.src.callbacks import ModelCheckpoint
 from keras.src.optimizers import Adafactor
 from tensorflow.keras.callbacks import TensorBoard
 
@@ -73,7 +74,14 @@ def train_model(resolution=256, epochs=100):
     with strategy.scope():
         callbacks = [
             TensorBoard(log_dir="image_clean", histogram_freq=1, write_graph=True, write_images=False,
-                        update_freq='epoch')
+                        update_freq='epoch'),
+            ModelCheckpoint(
+                filepath='best_model.keras',  # Path to save the model
+                monitor='val_loss',  # Metric to monitor
+                save_best_only=True,  # Only save the best model
+                mode='min',  # Save the model with the minimum loss
+                verbose=1  # Print messages when the model is saved
+            )
         ]
 
         optimizer = Adafactor(
@@ -90,7 +98,7 @@ def train_model(resolution=256, epochs=100):
         model.summary()
 
         # Train the model
-        model.fit(dataset, epochs=epochs, steps_per_epoch=250, callbacks=callbacks)
+        model.fit(dataset, epochs=epochs, steps_per_epoch=250, callbacks=callbacks, validation_data=dataset)
 
     # Save the model
     model.save('qr_correction_model.keras')
