@@ -87,7 +87,8 @@ def train_model(resolution=256, epochs=100, batch_size=64):
         ]
 
         optimizer = Adafactor(
-            learning_rate=0.1
+            learning_rate=0.1,
+            clipnorm=1.0
         )
 
         model = create_model(input_shape)
