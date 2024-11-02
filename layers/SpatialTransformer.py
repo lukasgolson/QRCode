@@ -1,7 +1,7 @@
 import keras
 import tensorflow as tf
-from keras import Layer
-from keras.src.layers import Conv2D, Flatten, Dense, Reshape, LeakyReLU
+from keras import Layer, Sequential
+from keras.src.layers import Conv2D, Flatten, Dense, Reshape, LeakyReLU, MaxPooling2D
 
 
 class SpatialTransformer(Layer):
@@ -13,22 +13,34 @@ class SpatialTransformer(Layer):
     def build(self, input_shape):
         self.input_shape = input_shape
 
-        # Define the localization networtf
-        self.localization_network = keras.Sequential([
-            Conv2D(8, (3, 3), strides=(2, 2), padding='valid', activation='relu'),
-            Conv2D(8, (3, 3), strides=(2, 2), padding='valid', activation='relu'),
-            Conv2D(8, (1, 1), strides=(2, 2), padding='valid', activation='relu'),
+        self.localization_network = Sequential([
+            # Convolutional layers with increasing filters for detailed feature extraction
+            Conv2D(16, (3, 3), strides=(2, 2), padding='valid', activation='relu'),
+            Conv2D(32, (3, 3), strides=(2, 2), padding='valid', activation='relu'),
+            Conv2D(64, (3, 3), strides=(2, 2), padding='valid', activation='relu'),
+            Conv2D(128, (3, 3), strides=(2, 2), padding='valid', activation='relu'),
+
+            # Optional pooling layers to further reduce dimensions
+            MaxPooling2D(pool_size=(2, 2)),
+
+            # Additional convolutional layer for more feature extraction
+            Conv2D(256, (1, 1), strides=(2, 2), padding='valid', activation='relu'),
+
+            # Flatten and Dense layers for final transformation parameters
             Flatten(),
+            Dense(100, activation='relu'),
             Dense(50, activation='relu'),
+
+            # Output layer initialized to identity transformation
             Dense(6, activation='linear', kernel_initializer='zeros',
                   bias_initializer=tf.constant_initializer([1, 0, 0, 0, 1, 0]))
-            # Identity transformation initialization
         ])
 
         self.localization_network.build(input_shape)
 
         super(SpatialTransformer, self).build(input_shape)
 
+    @tf.function
     def call(self, inputs):
         # Unpack the inputs
         x = inputs  # x is the input image/feature map
