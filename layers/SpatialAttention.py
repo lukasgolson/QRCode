@@ -25,16 +25,16 @@ class SpatialAttention(keras.layers.Layer):
 
         # Initialize layers in __init__
         self.conv1 = Conv2D(filters=1, kernel_size=2, padding='same', name='conv1')
-        self.activation1 = relu()
+        self.activation1 = Activation('relu')
         self.conv2 = Conv2D(filters=1, kernel_size=3, padding='same', name='conv2')
-        self.activation2 = relu()
+        self.activation2 = Activation('relu')
         self.conv3 = Conv2D(filters=1, kernel_size=5, padding='same', name='conv3')
-        self.activation3 = relu()
+        self.activation3 = Activation('relu')
         self.conv_pooling = None
 
         self.concatenate = Concatenate(axis=-1)
         self.batch_norm = BatchNormalization(name='batch_norm')
-        self.residual_activation = relu()
+        self.residual_activation = Activation('relu')
         self.use_residual = use_residual
 
     def build(self, input_shape):
