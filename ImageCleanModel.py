@@ -4,7 +4,7 @@ from keras.src import layers
 
 import tensorflow as tf
 from keras import backend as K
-from tensorflow.python.keras.callbacks import TensorBoard
+from tensorflow.keras.callbacks import TensorBoard
 
 import Dataset
 from layers.SpatialAttention import SpatialAttention
@@ -54,7 +54,7 @@ def train_model(resolution=256, epochs=100):
 
 
     callbacks = [
-        TensorBoard(log_dir="image_clean", histogram_freq=1, write_graph=True, write_images=False, update_freq=500),
+        TensorBoard(log_dir="image_clean", histogram_freq=1, write_graph=True, write_images=False, update_freq='epoch')
     ]
 
     with strategy.scope():
