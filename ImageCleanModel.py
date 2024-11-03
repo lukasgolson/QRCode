@@ -123,7 +123,7 @@ def train_model(resolution=256, epochs=100, batch_size=64):
         model.summary()
 
         # Train the model
-        model.fit(dataset, epochs=epochs, steps_per_epoch=250, callbacks=callbacks)
+        model.fit(dataset, epochs=epochs, steps_per_epoch=250, callbacks=callbacks, verbose=1)
 
     # Save the model
     model.save('qr_correction_model.keras')

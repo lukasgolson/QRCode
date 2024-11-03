@@ -1,7 +1,7 @@
 import keras
 import tensorflow as tf
 from keras import Layer, Sequential
-from keras.src.layers import Conv2D, Flatten, Dense, Reshape, LeakyReLU, MaxPooling2D
+from keras.src.layers import Conv2D, Flatten, Dense, Reshape, LeakyReLU, MaxPooling2D, BatchNormalization, Dropout
 
 
 class SpatialTransformer(Layer):
@@ -14,27 +14,28 @@ class SpatialTransformer(Layer):
         self.input_shape = input_shape
 
         self.localization_network = Sequential([
-            # Convolutional layers with increasing filters for detailed feature extraction
-            Conv2D(16, (3, 3), strides=(2, 2), padding='valid', activation='relu'),
-            Conv2D(32, (3, 3), strides=(2, 2), padding='valid', activation='relu'),
-            Conv2D(64, (3, 3), strides=(2, 2), padding='valid', activation='relu'),
-            Conv2D(128, (3, 3), strides=(2, 2), padding='valid', activation='relu'),
+            # Convolutional layers for feature extraction with batch normalization and dropout
+            Conv2D(32, (3, 3), strides=(2, 2), padding='same', activation='relu'),
+            BatchNormalization(),
+            Dropout(0.2),
 
-            # Optional pooling layers to further reduce dimensions
-            MaxPooling2D(pool_size=(2, 2)),
+            Conv2D(64, (3, 3), strides=(2, 2), padding='same', activation='relu'),
+            BatchNormalization(),
+            Dropout(0.2),
 
-            # Additional convolutional layer for more feature extraction
-            Conv2D(256, (1, 1), strides=(2, 2), padding='valid', activation='relu'),
+            Conv2D(128, (3, 3), strides=(2, 2), padding='same', activation='relu'),
+            BatchNormalization(),
 
             # Flatten and Dense layers for final transformation parameters
             Flatten(),
-            Dense(100, activation='relu'),
-            Dense(50, activation='relu'),
+            Dense(64, activation='relu'),
+            Dropout(0.5),
 
             # Output layer initialized to identity transformation
             Dense(6, activation='linear', kernel_initializer='zeros',
                   bias_initializer=tf.constant_initializer([1, 0, 0, 0, 1, 0]))
         ])
+
 
         self.localization_network.build(input_shape)
 
