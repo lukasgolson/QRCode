@@ -44,10 +44,10 @@ def create_model(input_shape):
 
     x = decoder(x)
 
-    x = layers.Conv2D(1, 1, activation='sigmoid', padding='same')(x)
+    output = layers.Conv2D(1, 1, activation='softplus', padding='same')(x)
 
     # Define the model
-    model = Model(inputs, x, name='qr_correction_model')
+    model = Model(inputs, output, name='qr_correction_model')
 
     return model
 
@@ -57,13 +57,35 @@ def create_model(input_shape):
 def ssim_loss(y_true, y_pred):
     return 1 - tf.reduce_mean(tf.image.ssim(y_true, y_pred, max_val=1.0))
 
+@tf.function
+@keras.saving.register_keras_serializable()
+def mse_loss(y_true, y_pred):
+    return tf.reduce_mean(tf.square(y_true - y_pred))
 
 @tf.function
 @keras.saving.register_keras_serializable()
-def combined_mse_ssim_loss(y_true, y_pred, alpha=0.5, beta=0.5):
-    mse = tf.reduce_mean(tf.square(y_true - y_pred))
+def binarized_bce_loss(y_true, y_pred, threshold=0.5):
+    y_pred_binary = tf.cast(y_pred > threshold, tf.float32)
+    y_true_binary = tf.cast(y_true > threshold, tf.float32)
+    return tf.reduce_mean(tf.keras.losses.binary_crossentropy(y_true_binary, y_pred_binary))
+
+@tf.function
+@keras.saving.register_keras_serializable()
+def edge_loss(y_true, y_pred):
+    y_true_edges = tf.image.sobel_edges(y_true)
+    y_pred_edges = tf.image.sobel_edges(y_pred)
+    return tf.reduce_mean(tf.square(y_true_edges - y_pred_edges))
+
+
+@tf.function
+@keras.saving.register_keras_serializable()
+def loss_func(y_true, y_pred, alpha=0.2, beta=0.3, gamma=0.2, epsilon=0.3):
+    mse = mse_loss(y_true, y_pred)
     ssim = ssim_loss(y_true, y_pred)
-    return alpha * mse + beta * ssim
+    bce = binarized_bce_loss(y_true, y_pred)
+    edge = edge_loss(y_true, y_pred)
+    return alpha * mse + beta * ssim + gamma * bce + epsilon * edge
+
 
 
 def train_model(resolution=256, epochs=100, batch_size=64):
@@ -96,7 +118,7 @@ def train_model(resolution=256, epochs=100, batch_size=64):
         dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
 
         # Compile the model
-        model.compile(optimizer=optimizer, loss=combined_mse_ssim_loss, metrics=[ssim_loss])
+        model.compile(optimizer=optimizer, loss=loss_func, metrics=[ssim_loss])
 
         model.summary()
 
