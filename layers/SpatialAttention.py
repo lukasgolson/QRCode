@@ -96,8 +96,8 @@ class SpatialAttention(keras.layers.Layer):
         attention_map2 = self.conv2(attention_map1)
         attention_map2 = self.activation2(attention_map2)
 
-        attention_map3 = self.conv2(attention_map2)
-        attention_map3 = self.activation2(attention_map3)
+        attention_map3 = self.conv3(attention_map2)
+        attention_map3 = self.activation3(attention_map3)
 
         # Concatenate the attention maps along the channel axis
         x = self.concatenate([attention_map1, attention_map2, attention_map3])
