@@ -28,10 +28,10 @@ class SpatialAttention(keras.layers.Layer):
         self.conv1 = Conv2D(filters=3, kernel_size=3, padding='same', name='conv1')
         self.activation1 = Activation('relu')
 
-        self.conv2 = Conv2D(filters=6, kernel_size=3, padding='same', name='conv2')
+        self.conv2 = Conv2D(filters=3, kernel_size=3, padding='same', name='conv2')
         self.activation2 = Activation('relu')
 
-        self.conv3 = Conv2D(filters=9, kernel_size=3, padding='same', name='conv3')
+        self.conv3 = Conv2D(filters=3, kernel_size=3, padding='same', name='conv3')
         self.activation3 = Activation('relu')
 
         self.conv_pooling = None
