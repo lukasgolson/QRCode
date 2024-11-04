@@ -201,10 +201,11 @@ def run_inference(image_path, model, encoder, layer_number=None, save_output=Fal
         output_image = prediction[0]
         save_channel_image(output_image, 'output_image.png')
         print("Output image saved.")
+        return None
     else:
         decoded_text = encoder.decode(prediction)
         print(f"Decoded text: {decoded_text}")  # Debug statement
-    return decoded_text
+        return decoded_text
 
 
 if __name__ == "__main__":
@@ -243,7 +244,9 @@ if __name__ == "__main__":
             exit(1)
 
         result = run_inference(args.image, model, encoder, args.layer, args.save_output, args.output_all_layers, output_is_image=args.image_out)
-        print(f"Predicted text content: {result}")
+
+        if result is not None:
+            print(f"Predicted text content: {result}")
     else:
         if not args.print_model:
             print("No image path provided for inference and --print_model not used. Exiting.")

@@ -16,6 +16,24 @@ from layers.SpatialTransformer import SpatialTransformer
 from layers.SqueezeExcitation import SqueezeExcitation
 
 
+def Conv2DSkip(input_layer, filters, kernel_size, activation='relu', padding='same'):
+    # Perform convolution on the input layer
+    x = layers.Conv2D(filters, kernel_size, padding=padding)(input_layer)
+
+    # Create a skip connection
+    skip = input_layer
+
+    # If the number of filters in the skip connection does not match, adjust it
+    if input_layer.shape[-1] != filters:
+        skip = layers.Conv2D(filters, kernel_size=(1, 1), padding=padding)(input_layer)
+
+    # Add the skip connection to the output of the convolutional layer
+    x = layers.Add()([skip, x])
+
+    # Apply the activation function after the addition
+    return layers.Activation(activation)(x)
+
+
 def create_model(input_shape):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
@@ -25,16 +43,16 @@ def create_model(input_shape):
     x = SpatialAttention()(x)
 
     # Apply convolutional layers
-    x = layers.Conv2D(16, 3, activation='relu', padding='same')(x)
-    x = layers.Conv2D(32, 3, activation='relu', padding='same')(x)
+    x = Conv2DSkip(x, 32, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 64, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 128, 3, activation='relu', padding='same')
 
     # Apply spatial attention to the output of the convolutional layers
     x = SqueezeExcitation()(x)
 
     x = SpatialAttention()(x)
 
-
-    output = layers.Conv2D(1, 1, activation='softplus', padding='same')(x)
+    output = layers.Conv2D(1, 1, activation='linear', padding='same')(x)
 
     # Define the model
     model = Model(inputs, output, name='qr_correction_model')
@@ -74,14 +92,14 @@ def edge_loss(y_true, y_pred):
 @keras.saving.register_keras_serializable()
 def loss_func(y_true, y_pred):
     alpha = 0.2
-    beta = 0.3
+    # beta = 0.3
     gamma = 0.2
     epsilon = 0.3
     mse = mse_loss(y_true, y_pred)
-    ssim = ssim_loss(y_true, y_pred)
+    # ssim = ssim_loss(y_true, y_pred)
     bce = binarized_bce_loss(y_true, y_pred)
     edge = edge_loss(y_true, y_pred)
-    return alpha * mse + beta * ssim + gamma * bce + epsilon * edge
+    return alpha * mse + gamma * bce + epsilon * edge
 
 
 def train_model(resolution=256, epochs=100, batch_size=64):
@@ -104,7 +122,7 @@ def train_model(resolution=256, epochs=100, batch_size=64):
         ]
 
         optimizer = Adafactor(
-            learning_rate=0.1,
+            learning_rate=1,
             clipnorm=1.0
         )
 
@@ -113,7 +131,7 @@ def train_model(resolution=256, epochs=100, batch_size=64):
         dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
 
         # Compile the model
-        model.compile(optimizer=optimizer, loss=loss_func, metrics=[ssim_loss])
+        model.compile(optimizer=optimizer, loss=loss_func, metrics=["rmse"])
 
         model.summary()
 

@@ -57,6 +57,9 @@ def create_cnn_architecture(input_tensor, length, min_resolution=64, max_channel
         x = Conv2D(current_channels, (3, 3), padding='same')(x)
         x = layers.LeakyReLU()(x)
 
+        x = Conv2D(current_channels, (3, 3), padding='same')(x)
+        x = layers.BatchNormalization()(x)
+
         if use_residual:
             # Ensure the residual has the same number of channels
             if residual.shape[-1] != x.shape[-1]:
