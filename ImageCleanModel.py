@@ -49,8 +49,7 @@ def create_model(input_shape):
 
     # Apply spatial attention to the output of the convolutional layers
     x = SqueezeExcitation()(x)
-
-    #x = SpatialAttention()(x)
+    x = SpatialAttention()(x)
 
     output = layers.Conv2D(1, 1, activation='linear', padding='same')(x)
 
