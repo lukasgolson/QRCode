@@ -131,7 +131,7 @@ def train_model(resolution=256, epochs=100, batch_size=64):
         dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
 
         # Compile the model
-        model.compile(optimizer=optimizer, loss=loss_func, metrics=["rmse"])
+        model.compile(optimizer=optimizer, loss=loss_func, metrics=["mse"])
 
         model.summary()
 
