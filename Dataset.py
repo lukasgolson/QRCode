@@ -90,28 +90,36 @@ def generate_qr_code(repeats=3, max_sequence_length=500):
 
 
 def normalize_image(image, target_size=(512, 512)):
-
     image = image.resize(target_size)
 
     return np.array(image.convert('L')).reshape((target_size[0], target_size[1], 1)) / 255.0
 
 
-def load_qr_code_data(target_size, encoder=None, paired=False):
+def load_qr_code_data(target_size, encoder=None, paired=False, clean_image_every_n=8):
     """Infinite generator to create QR codes in memory with paired or non-paired output."""
+
+    i = 0
     while True:
         content, clean, dirty = generate_qr_code(repeats=1,
                                                  max_sequence_length=encoder.max_sequence_length)
+        i += 1
+        i = i % 65536
 
         clean_img = normalize_image(clean, target_size)
-        dirty_img = normalize_image(dirty[0], target_size)  # Take the first dirty version
+
+        if i % clean_image_every_n == 0:
+            dirty_img = clean_img
+        else:
+            dirty_img = normalize_image(dirty[0], target_size)  # Take the first dirty version
 
         if paired:
             # Yield (dirty_img, clean_img) for paired output
             yield dirty_img, clean_img
+
+
         else:
             # Encode content for non-paired output
             encoded_content = encoder.encode(content)
-            yield clean_img, encoded_content
             yield dirty_img, encoded_content
 
 
