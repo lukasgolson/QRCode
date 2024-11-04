@@ -3,6 +3,7 @@ from keras.layers import Conv2D, Multiply, Activation, Add, BatchNormalization, 
 from keras.src.activations import relu
 from keras.src.ops import relu
 
+import tensorflow as tf
 
 @keras.saving.register_keras_serializable(package="qr_model", name="SpatialAttention")
 class SpatialAttention(keras.layers.Layer):
