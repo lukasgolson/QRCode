@@ -2,7 +2,7 @@ import keras
 from keras import Layer
 from keras.src import initializers, layers
 from keras.src.layers import Dense, GlobalAveragePooling2D, Reshape, Multiply, Add, BatchNormalization, Activation
-
+import tensorflow as tf
 
 @keras.saving.register_keras_serializable(package="qr_model", name="SqueezeExcitation")
 class SqueezeExcitation(Layer):
@@ -33,6 +33,7 @@ class SqueezeExcitation(Layer):
             batch_norm_shape = self.batch_norm.compute_output_shape(input_shape)
             self.residual_activation.build(batch_norm_shape)
 
+    @tf.function
     def call(self, inputs):
 
         # Squeeze: Global Average Pooling

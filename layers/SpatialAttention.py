@@ -2,6 +2,7 @@ import keras
 from keras.layers import Conv2D, Multiply, Activation, Add, BatchNormalization, Concatenate
 from keras.src.activations import relu
 from keras.src.ops import relu
+import tensorflow as tf
 
 
 @keras.saving.register_keras_serializable(package="qr_model", name="SpatialAttention")
@@ -70,6 +71,7 @@ class SpatialAttention(keras.layers.Layer):
 
         # Call the parent class's build method
 
+    @tf.function
     def call(self, inputs):
         """
         Applies the spatial attention mechanism to the inputs.
@@ -86,8 +88,6 @@ class SpatialAttention(keras.layers.Layer):
 
         attention_map2 = self.conv2(inputs)
         attention_map2 = self.activation2(attention_map2)
-
-
 
         # Concatenate the attention maps along the channel axis
         x = self.concatenate([attention_map1, attention_map2])
