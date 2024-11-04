@@ -1,145 +1,86 @@
 import keras
 from keras.layers import Conv2D, Multiply, Activation, Add, BatchNormalization, Concatenate
-from keras.src.activations import relu
-from keras.src.ops import relu
 import tensorflow as tf
-
 
 @keras.saving.register_keras_serializable(package="qr_model", name="SpatialAttention")
 class SpatialAttention(keras.layers.Layer):
-    """
-    A Keras layer that applies spatial attention to the input features using CNN.
-    It computes attention weights based on convolutional operations on the input
-    and then multiplies the input with these weights to enhance important features.
-    An optional skip connection can also be included.
-    """
-
-    def __init__(self, use_residual=True, **kwargs):
+    def __init__(self, num_layers=3, initial_filters=3, filter_step=3, use_residual=True, **kwargs):
         """
         Initializes the SpatialAttention layer.
 
         Args:
+            num_layers (int): Number of convolution layers.
+            initial_filters (int): Number of filters for the first convolution layer.
+            filter_step (int): Increment of filters for each subsequent layer.
             use_residual (bool): If True, enables the skip connection.
             **kwargs: Additional keyword arguments passed to the parent class.
         """
         super(SpatialAttention, self).__init__(**kwargs)
+        self.num_layers = num_layers
+        self.initial_filters = initial_filters
+        self.filter_step = filter_step
+        self.use_residual = use_residual
 
-        # Initialize layers in __init__
-        self.conv1 = Conv2D(filters=3, kernel_size=3, padding='same', name='conv1')
-        self.activation1 = Activation('relu')
+        self.convs = []
+        self.activations = []
 
-        self.conv2 = Conv2D(filters=6, kernel_size=3, padding='same', name='conv2')
-        self.activation2 = Activation('relu')
+        for i in range(num_layers):
+            filters = initial_filters + i * filter_step
+            self.convs.append(Conv2D(filters=filters, kernel_size=3, padding='same', name=f'conv{i+1}'))
+            self.activations.append(Activation('relu'))
 
-        self.conv3 = Conv2D(filters=9, kernel_size=3, padding='same', name='conv3')
-        self.activation3 = Activation('relu')
-
-        self.conv_pooling = None
-
+        self.conv_pooling = Conv2D(filters=1, kernel_size=1, padding='same', name='conv_pooling')
         self.final_activation = Activation('sigmoid')
-
         self.concatenate = Concatenate(axis=-1)
         self.batch_norm = BatchNormalization(name='batch_norm')
         self.residual_activation = Activation('relu')
-        self.use_residual = use_residual
 
     def build(self, input_shape):
-        """
-        Builds the layer by initializing convolutional layers for generating attention weights.
+        attention_map_shapes = [input_shape]
+        for conv in self.convs:
+            conv.build(attention_map_shapes[-1])
+            attention_map_shapes.append(conv.compute_output_shape(attention_map_shapes[-1]))
 
-        Args:
-            input_shape (tuple): Shape of the input tensor (batch_size, height, width, channels).
-        """
-        self.conv_pooling = Conv2D(filters=1, kernel_size=1, padding='same',
-                                   name='conv_pooling')
-
-        self.conv1.build(input_shape)
-        attention_map1_shape = self.conv1.compute_output_shape(input_shape)
-
-        self.conv2.build(attention_map1_shape)
-        attention_map2_shape = self.conv2.compute_output_shape(attention_map1_shape)
-
-        self.conv3.build(attention_map2_shape)
-        attention_map3_shape = self.conv3.compute_output_shape(attention_map2_shape)
-
-        self.concatenate.build([attention_map1_shape, attention_map2_shape, attention_map3_shape])
-
-        concatenate_shape = self.concatenate.compute_output_shape(
-            [attention_map1_shape, attention_map2_shape, attention_map3_shape])
-
-        self.conv_pooling.build(concatenate_shape)
-
-        conv_pooling_shape = self.conv_pooling.compute_output_shape(concatenate_shape)
+        self.concatenate.build(attention_map_shapes[1:])
+        concatenated_shape = self.concatenate.compute_output_shape(attention_map_shapes[1:])
+        self.conv_pooling.build(concatenated_shape)
 
         if self.use_residual:
-            self.batch_norm.build(conv_pooling_shape)
+            self.batch_norm.build(concatenated_shape)
 
         super(SpatialAttention, self).build(input_shape)
 
-        # Call the parent class's build method
-
     @tf.function
     def call(self, inputs):
-        """
-        Applies the spatial attention mechanism to the inputs.
+        attention_maps = [inputs]
 
-        Args:
-            inputs (tensor): Input tensor of shape (batch_size, height, width, channels).
+        for conv, activation in zip(self.convs, self.activations):
+            x = conv(attention_maps[-1])
+            x = activation(x)
+            attention_maps.append(x)
 
-        Returns:
-            tensor: The output tensor with spatial attention applied, with optional skip connection.
-        """
-        # Compute attention maps using convolutional operations
-        attention_map1 = self.conv1(inputs)
-        attention_map1 = self.activation1(attention_map1)
-
-        attention_map2 = self.conv2(attention_map1)
-        attention_map2 = self.activation2(attention_map2)
-
-        attention_map3 = self.conv3(attention_map2)
-        attention_map3 = self.activation3(attention_map3)
-
-        # Concatenate the attention maps along the channel axis
-        x = self.concatenate([attention_map1, attention_map2, attention_map3])
-
-        # Apply 1x1 convolution to reduce the concatenated maps to the same depth as inputs
+        x = self.concatenate(attention_maps[1:])
         x = self.conv_pooling(x)
-
         x = self.final_activation(x)
-
-        # Multiply the input with the combined attention weights
         x = Multiply()([x, inputs])
 
-        # If skip connection is enabled, add the input to the output
         if self.use_residual:
-            x = Add()([inputs, x])  # Skip connection
-
-            # Apply batch normalization and activation
+            x = Add()([inputs, x])
             x = self.batch_norm(x)
             x = self.residual_activation(x)
 
         return x
 
     def get_config(self):
-        """
-        Returns the configuration of the layer.
-
-        Returns:
-            dict: Configuration dictionary containing layer parameters.
-        """
         base_config = super(SpatialAttention, self).get_config()
-        config = {'use_residual': self.use_residual}
+        config = {
+            'num_layers': self.num_layers,
+            'initial_filters': self.initial_filters,
+            'filter_step': self.filter_step,
+            'use_residual': self.use_residual
+        }
         return {**base_config, **config}
 
     @classmethod
     def from_config(cls, config):
-        """
-        Creates an instance of the layer from its configuration.
-
-        Args:
-            config (dict): Configuration dictionary to recreate the layer.
-
-        Returns:
-            SpatialAttention: An instance of the SpatialAttention layer.
-        """
         return cls(**config)

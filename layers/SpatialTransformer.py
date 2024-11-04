@@ -1,7 +1,8 @@
 import keras
 import tensorflow as tf
 from keras import Layer, Sequential
-from keras.src.layers import Conv2D, Flatten, Dense, Reshape, LeakyReLU, MaxPooling2D, BatchNormalization, Dropout
+from keras.src.layers import Conv2D, Flatten, Dense, Reshape, LeakyReLU, MaxPooling2D, BatchNormalization, Dropout, \
+    SpatialDropout2D
 
 
 class SpatialTransformer(Layer):
@@ -17,11 +18,11 @@ class SpatialTransformer(Layer):
             # Convolutional layers for feature extraction with batch normalization and dropout
             Conv2D(32, (3, 3), strides=(2, 2), padding='same', activation='relu'),
             BatchNormalization(),
-            Dropout(0.2),
+            SpatialDropout2D(0.2),
 
             Conv2D(64, (3, 3), strides=(2, 2), padding='same', activation='relu'),
             BatchNormalization(),
-            Dropout(0.2),
+            SpatialDropout2D(0.2),
 
             Conv2D(128, (3, 3), strides=(2, 2), padding='same', activation='relu'),
             BatchNormalization(),
@@ -29,7 +30,7 @@ class SpatialTransformer(Layer):
             # Flatten and Dense layers for final transformation parameters
             Flatten(),
             Dense(64, activation='relu'),
-            Dropout(0.5),
+            Dropout(0.2),
 
             # Output layer initialized to identity transformation
             Dense(6, activation='linear', kernel_initializer='zeros',

@@ -11,6 +11,7 @@ from keras.src.optimizers import Adafactor
 from tensorflow.keras.callbacks import TensorBoard
 
 import Dataset
+from layers.SoftThresholdLayer import SoftThresholdLayer
 from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
 from layers.SqueezeExcitation import SqueezeExcitation
@@ -38,14 +39,22 @@ def create_model(input_shape):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    # Apply spatial transformer to the input image
     x = SpatialAttention()(inputs)
+
+    # Apply spatial transformer to the input image
     x = SpatialTransformer()(x)
 
     # Apply convolutional layers
     x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
 
     x = SqueezeExcitation()(x)
+
+    x = SoftThresholdLayer()(x)
+
+    x = SpatialAttention()(x)
+
 
     output = layers.Conv2D(1, 1, activation='linear', padding='same')(x)
 
