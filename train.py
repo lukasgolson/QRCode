@@ -58,9 +58,15 @@ def get_model(max_sequence_length=512, num_chars=128, target_image_size=512):
 
 
 def compile_model(model):
+
+    if JIT_COMPILE:
+        jit = True
+    else:
+        jit = "auto"
+
     optimizer = tf.keras.optimizers.Adafactor(clipnorm=1.0, learning_rate=1.0, weight_decay=0.0001)
     model.compile(optimizer=optimizer, loss=masked_categorical_crossentropy,
-                  metrics=['accuracy'], jit_compile=JIT_COMPILE, run_eagerly=RUN_EAGERLY)
+                  metrics=['accuracy'], jit_compile=jit, run_eagerly=RUN_EAGERLY)
     return model
 
 

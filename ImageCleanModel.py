@@ -102,7 +102,7 @@ def loss_func(y_true, y_pred):
     return alpha * mse + gamma * bce + epsilon * edge
 
 
-def train_model(resolution=256, epochs=100, batch_size=64):
+def train_model(resolution=256, epochs=100, batch_size=64, jit=False):
     strategy = tf.distribute.MirroredStrategy()
 
     # Create the model
@@ -130,8 +130,13 @@ def train_model(resolution=256, epochs=100, batch_size=64):
 
         dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
 
+        if jit:
+            jit = True
+        else:
+            jit = "auto"
+
         # Compile the model
-        model.compile(optimizer=optimizer, loss=loss_func, metrics=["mse"])
+        model.compile(optimizer=optimizer, loss=loss_func, metrics=["mse"], jit_compile=jit, run_eagerly=True)
 
         model.summary()
 
@@ -146,7 +151,10 @@ if __name__ == '__main__':
     # get batch size argument
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("-JIT", nargs="?", default=False, const=True, type=bool,
+                        help="Enable Just-In-Time compilation.")
 
     batch_size = parser.parse_args().batch_size
+    jit_compile = parser.parse_args().JIT
 
-    train_model(batch_size=batch_size)
+    train_model(batch_size=batch_size, jit=jit_compile)
