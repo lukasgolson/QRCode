@@ -39,18 +39,13 @@ def create_model(input_shape):
     inputs = layers.Input(shape=input_shape)
 
     # Apply spatial transformer to the input image
-    x = SpatialTransformer()(inputs)
-    x = SpatialAttention()(x)
+    x = SpatialAttention()(inputs)
+    x = SpatialTransformer()(x)
 
     # Apply convolutional layers
     x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
-    x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
-    x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
 
-
-    # Apply spatial attention to the output of the convolutional layers
     x = SqueezeExcitation()(x)
-    x = SpatialAttention()(x)
 
     output = layers.Conv2D(1, 1, activation='linear', padding='same')(x)
 

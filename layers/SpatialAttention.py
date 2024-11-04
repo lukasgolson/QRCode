@@ -2,8 +2,8 @@ import keras
 from keras.layers import Conv2D, Multiply, Activation, Add, BatchNormalization, Concatenate
 from keras.src.activations import relu
 from keras.src.ops import relu
-
 import tensorflow as tf
+
 
 @keras.saving.register_keras_serializable(package="qr_model", name="SpatialAttention")
 class SpatialAttention(keras.layers.Layer):
@@ -25,10 +25,14 @@ class SpatialAttention(keras.layers.Layer):
         super(SpatialAttention, self).__init__(**kwargs)
 
         # Initialize layers in __init__
-        self.conv1 = Conv2D(filters=3, kernel_size=2, padding='same', name='conv1')
+        self.conv1 = Conv2D(filters=3, kernel_size=3, padding='same', name='conv1')
         self.activation1 = Activation('relu')
-        self.conv2 = Conv2D(filters=3, kernel_size=3, padding='same', name='conv2')
+
+        self.conv2 = Conv2D(filters=6, kernel_size=3, padding='same', name='conv2')
         self.activation2 = Activation('relu')
+
+        self.conv3 = Conv2D(filters=9, kernel_size=3, padding='same', name='conv3')
+        self.activation3 = Activation('relu')
 
         self.conv_pooling = None
 
@@ -46,19 +50,22 @@ class SpatialAttention(keras.layers.Layer):
         Args:
             input_shape (tuple): Shape of the input tensor (batch_size, height, width, channels).
         """
-        self.conv_pooling = Conv2D(filters=input_shape[-1], kernel_size=1, padding='same', activation='relu',
+        self.conv_pooling = Conv2D(filters=1, kernel_size=1, padding='same',
                                    name='conv_pooling')
 
         self.conv1.build(input_shape)
-        self.conv2.build(input_shape)
-
         attention_map1_shape = self.conv1.compute_output_shape(input_shape)
-        attention_map2_shape = self.conv2.compute_output_shape(input_shape)
 
-        self.concatenate.build([attention_map1_shape, attention_map2_shape])
+        self.conv2.build(attention_map1_shape)
+        attention_map2_shape = self.conv2.compute_output_shape(attention_map1_shape)
+
+        self.conv3.build(attention_map2_shape)
+        attention_map3_shape = self.conv3.compute_output_shape(attention_map2_shape)
+
+        self.concatenate.build([attention_map1_shape, attention_map2_shape, attention_map3_shape])
 
         concatenate_shape = self.concatenate.compute_output_shape(
-            [attention_map1_shape, attention_map2_shape])
+            [attention_map1_shape, attention_map2_shape, attention_map3_shape])
 
         self.conv_pooling.build(concatenate_shape)
 
@@ -86,13 +93,14 @@ class SpatialAttention(keras.layers.Layer):
         attention_map1 = self.conv1(inputs)
         attention_map1 = self.activation1(attention_map1)
 
-        attention_map2 = self.conv2(inputs)
+        attention_map2 = self.conv2(attention_map1)
         attention_map2 = self.activation2(attention_map2)
 
-
+        attention_map3 = self.conv3(attention_map2)
+        attention_map3 = self.activation3(attention_map3)
 
         # Concatenate the attention maps along the channel axis
-        x = self.concatenate([attention_map1, attention_map2])
+        x = self.concatenate([attention_map1, attention_map2, attention_map3])
 
         # Apply 1x1 convolution to reduce the concatenated maps to the same depth as inputs
         x = self.conv_pooling(x)
@@ -100,7 +108,7 @@ class SpatialAttention(keras.layers.Layer):
         x = self.final_activation(x)
 
         # Multiply the input with the combined attention weights
-        x = Multiply()([inputs, x])
+        x = Multiply()([x, inputs])
 
         # If skip connection is enabled, add the input to the output
         if self.use_residual:
