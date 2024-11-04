@@ -13,22 +13,7 @@ from tensorflow.keras.callbacks import TensorBoard
 import Dataset
 from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
-
-
-def encoder(x):
-    for filters in [16, 32, 64]:
-        x = layers.Conv2D(filters, 3, activation='relu', padding='same')(x)
-        x = layers.BatchNormalization()(x)
-        x = layers.MaxPooling2D(pool_size=(2, 2))(x)
-    return x
-
-
-def decoder(x):
-    for filters in [64, 32, 16]:
-        x = layers.UpSampling2D(size=(2, 2))(x)
-        x = layers.Conv2D(filters, 3, padding='same', activation='relu')(x)
-        x = layers.BatchNormalization()(x)
-    return x
+from layers.SqueezeExcitation import SqueezeExcitation
 
 
 def create_model(input_shape):
@@ -37,12 +22,17 @@ def create_model(input_shape):
 
     # Apply spatial transformer to the input image
     x = SpatialTransformer()(inputs)
+    x = SpatialAttention()(x)
 
-    x = encoder(x)
+    # Apply convolutional layers
+    x = layers.Conv2D(16, 3, activation='relu', padding='same')(x)
+    x = layers.Conv2D(32, 3, activation='relu', padding='same')(x)
+
+    # Apply spatial attention to the output of the convolutional layers
+    x = SqueezeExcitation()(x)
 
     x = SpatialAttention()(x)
 
-    x = decoder(x)
 
     output = layers.Conv2D(1, 1, activation='softplus', padding='same')(x)
 
@@ -57,10 +47,12 @@ def create_model(input_shape):
 def ssim_loss(y_true, y_pred):
     return 1 - tf.reduce_mean(tf.image.ssim(y_true, y_pred, max_val=1.0))
 
+
 @tf.function
 @keras.saving.register_keras_serializable()
 def mse_loss(y_true, y_pred):
     return tf.reduce_mean(tf.square(y_true - y_pred))
+
 
 @tf.function
 @keras.saving.register_keras_serializable()
@@ -68,6 +60,7 @@ def binarized_bce_loss(y_true, y_pred, threshold=0.5):
     y_pred_binary = tf.cast(y_pred > threshold, tf.float32)
     y_true_binary = tf.cast(y_true > threshold, tf.float32)
     return tf.reduce_mean(tf.keras.losses.binary_crossentropy(y_true_binary, y_pred_binary))
+
 
 @tf.function
 @keras.saving.register_keras_serializable()
@@ -79,7 +72,11 @@ def edge_loss(y_true, y_pred):
 
 @tf.function
 @keras.saving.register_keras_serializable()
-def loss_func(y_true, y_pred, alpha=0.2, beta=0.3, gamma=0.2, epsilon=0.3):
+def loss_func(y_true, y_pred):
+    alpha = 0.2
+    beta = 0.3
+    gamma = 0.2
+    epsilon = 0.3
     mse = mse_loss(y_true, y_pred)
     ssim = ssim_loss(y_true, y_pred)
     bce = binarized_bce_loss(y_true, y_pred)
@@ -87,10 +84,8 @@ def loss_func(y_true, y_pred, alpha=0.2, beta=0.3, gamma=0.2, epsilon=0.3):
     return alpha * mse + beta * ssim + gamma * bce + epsilon * edge
 
 
-
 def train_model(resolution=256, epochs=100, batch_size=64):
     strategy = tf.distribute.MirroredStrategy()
-
 
     # Create the model
     input_shape = (resolution, resolution, 1)
@@ -130,7 +125,6 @@ def train_model(resolution=256, epochs=100, batch_size=64):
 
 
 if __name__ == '__main__':
-
     # get batch size argument
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=64)
