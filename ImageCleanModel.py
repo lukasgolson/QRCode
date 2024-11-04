@@ -43,9 +43,10 @@ def create_model(input_shape):
     x = SpatialAttention()(x)
 
     # Apply convolutional layers
-    x = Conv2DSkip(x, 8, 3, activation='relu', padding='same')
-    x = Conv2DSkip(x, 16, 3, activation='relu', padding='same')
-    x = Conv2DSkip(x, 32, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
+
 
     # Apply spatial attention to the output of the convolutional layers
     x = SqueezeExcitation()(x)
