@@ -44,7 +44,6 @@ class SpatialAttention(keras.layers.Layer):
         self.concatenate.build(attention_map_shapes[1:])
         concatenated_shape = self.concatenate.compute_output_shape(attention_map_shapes[1:])
         self.conv_pooling.build(concatenated_shape)
-        conv_pooling_shape = self.conv_pooling.compute_output_shape(concatenated_shape)
 
         if self.use_residual:
             self.batch_norm.build(input_shape)
