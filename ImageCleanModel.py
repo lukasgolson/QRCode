@@ -136,7 +136,7 @@ def train_model(resolution=256, epochs=100, batch_size=64, jit=False):
             jit = "auto"
 
         # Compile the model
-        model.compile(optimizer=optimizer, loss=loss_func, metrics=["mse"], jit_compile=jit, run_eagerly=True)
+        model.compile(optimizer=optimizer, loss=loss_func, metrics=["mse"], jit_compile=jit)
 
         model.summary()
 
