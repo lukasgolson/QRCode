@@ -53,7 +53,7 @@ def create_model(input_shape):
     x = Conv2DSkip(x, 16, 3, activation='relu', padding='same')
 
     x = BatchNormalization()(x)
-    #x = SoftThresholdLayer()(x)
+    x = SoftThresholdLayer()(x)
 
     x = layers.Conv2D(8, 3, activation='relu', padding='same')(x)
     x = layers.Conv2D(4, 3, activation='relu', padding='same')(x)

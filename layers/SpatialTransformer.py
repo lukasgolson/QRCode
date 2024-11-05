@@ -11,6 +11,10 @@ class SpatialTransformer(Layer):
         # Define the localization networtf parameters
 
         self.output_intermediaries = output_intermediaries
+
+        self.leaky_relu = LeakyReLU(alpha=0.1)
+
+
         self.localization_network = None
         self.trans_param_network = None
 
@@ -105,11 +109,21 @@ class SpatialTransformer(Layer):
 
         if self.output_intermediaries:
             resized = tf.image.resize(x_transformed, (self.input_shape[1], self.input_shape[2]), method='nearest')
-            x = self.concatenate_layer([x, resized])
+            x_residual = self.concatenate_layer([x, resized])
+        else:
+            x_residual = x  # If no intermediaries, just keep the original input
 
-        # Sample the input using the generated grid
+
+    # Sample the input using the generated grid
         x_transformed = self._sampler(x, grid)
-        return x_transformed
+
+        output = x_transformed + x_residual  # Element-wise addition
+
+        output = self.leaky_relu(output)  # Example activation
+
+
+
+        return output
 
     def get_config(self):
         base_config = super(SpatialTransformer, self).get_config()
