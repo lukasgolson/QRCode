@@ -66,7 +66,7 @@ class SpatialTransformer(Layer):
         self.trans_param_network.build(localization_network_output_shape)
 
         if self.output_intermediaries:
-            self.concatenate_layer = Concatenate()
+            self.concatenate_layer = Concatenate(axis=-1)
             self.concatenate_layer.build([input_shape, localization_network_output_shape])
 
         super(SpatialTransformer, self).build(input_shape)
@@ -92,7 +92,8 @@ class SpatialTransformer(Layer):
         grid = self._generate_grid(theta, self.input_shape[0:3])  # Get height and width from input shape
 
         if self.output_intermediaries:
-            x = self.concatenate_layer([x, x_transformed])
+            resized = tf.image.resize(x_transformed, (self.input_shape[1], self.input_shape[2]), method='nearest')
+            x = self.concatenate_layer([x, resized])
 
         # Sample the input using the generated grid
         x_transformed = self._sampler(x, grid)
@@ -108,7 +109,6 @@ class SpatialTransformer(Layer):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
-
 
     @tf.function
     def _generate_grid(self, theta, output_size):
@@ -158,7 +158,6 @@ class SpatialTransformer(Layer):
         #   print(f"Reshaped transformed grid shape: {reshaped.shape}")  # Should be (batch_size, height, width, 2)
 
         return reshaped
-
 
     @tf.function
     def _sampler(self, img, grid):
