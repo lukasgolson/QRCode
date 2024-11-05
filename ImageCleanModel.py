@@ -39,22 +39,23 @@ def create_model(input_shape):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    x = SpatialAttention()(inputs)
-
     # Apply spatial transformer to the input image
-    x = SpatialTransformer()(x)
+    x = SpatialTransformer()(inputs)
+
+    x = SpatialAttention()(x)
 
     # Apply convolutional layers
     x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
     x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
+    x = SqueezeExcitation()(x)
+
     x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
 
     x = SqueezeExcitation()(x)
 
     x = SoftThresholdLayer()(x)
 
-    x = SpatialAttention()(x)
-
+    x = layers.Conv2D(1, 1, activation='relu', padding='same')(x)
 
     output = layers.Conv2D(1, 1, activation='linear', padding='same')(x)
 
@@ -140,7 +141,8 @@ def train_model(resolution=256, epochs=100, batch_size=64, jit=False):
             jit = "auto"
 
         # Compile the model
-        model.compile(optimizer=optimizer, loss=loss_func, metrics=["mse", mse_loss, binarized_bce_loss, edge_loss], jit_compile=jit)
+        model.compile(optimizer=optimizer, loss=loss_func, metrics=["mse", mse_loss, binarized_bce_loss, edge_loss],
+                      jit_compile=jit)
 
         model.summary()
 

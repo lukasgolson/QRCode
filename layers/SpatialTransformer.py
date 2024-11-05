@@ -16,20 +16,19 @@ class SpatialTransformer(Layer):
 
         self.localization_network = Sequential([
             # Convolutional layers for feature extraction with batch normalization and dropout
-            Conv2D(32, (3, 3), strides=(2, 2), padding='same', activation='relu'),
-            BatchNormalization(),
-            SpatialDropout2D(0.2),
+            Conv2D(32, (3, 3), padding='same', activation='relu'),
+            Conv2D(32, (1, 1), strides=(2, 2), padding='same', activation='relu'),
 
-            Conv2D(64, (3, 3), strides=(2, 2), padding='same', activation='relu'),
-            BatchNormalization(),
-            SpatialDropout2D(0.2),
+            Conv2D(64, (3, 3), padding='same', activation='relu'),
+            Conv2D(64, (1, 1), strides=(2, 2), padding='same', activation='relu'),
 
-            Conv2D(128, (3, 3), strides=(2, 2), padding='same', activation='relu'),
-            BatchNormalization(),
+            Conv2D(128, (3, 3), padding='same', activation='relu'),
+            Conv2D(128, (1, 1), strides=(2, 2), padding='same', activation='relu'),
 
             # Flatten and Dense layers for final transformation parameters
             Flatten(),
-            Dense(64, activation='relu'),
+            BatchNormalization(),
+            Dense(128, activation='relu'),
             Dropout(0.2),
 
             # Output layer initialized to identity transformation
