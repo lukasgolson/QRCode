@@ -5,7 +5,7 @@ import tensorflow as tf
 
 @keras.saving.register_keras_serializable(package="qr_model", name="SpatialAttention")
 class SpatialAttention(keras.layers.Layer):
-    def __init__(self, num_layers=3, initial_filters=3, filter_step=3, use_residual=True, **kwargs):
+    def __init__(self, num_layers=2, initial_filters=4, filter_step=4, use_residual=True, **kwargs):
         """
         Initializes the SpatialAttention layer.
 

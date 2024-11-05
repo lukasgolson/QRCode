@@ -47,9 +47,9 @@ def create_model(input_shape):
     x = SpatialAttention()(x)
 
     # Apply convolutional layers
-    x = Conv2DSkip(x, 6, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 16, 3, activation='relu', padding='same')
     x = SqueezeExcitation()(x)
-    x = Conv2DSkip(x, 12, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 16, 3, activation='relu', padding='same')
 
 
     x = SoftThresholdLayer()(x)
@@ -97,8 +97,8 @@ def edge_loss(y_true, y_pred):
 def loss_func(y_true, y_pred):
     alpha = 0
     # beta = 0.3
-    gamma = 1
-    epsilon = 0
+    gamma = 0
+    epsilon = 1
     mse = mse_loss(y_true, y_pred)
     # ssim = ssim_loss(y_true, y_pred)
     bce = binarized_bce_loss(y_true, y_pred)
