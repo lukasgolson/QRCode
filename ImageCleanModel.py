@@ -53,7 +53,7 @@ def create_model(input_shape):
     x = Conv2DSkip(x, 16, 3, activation='relu', padding='same')
 
     x = BatchNormalization()(x)
-    x = SoftThresholdLayer()(x)
+    #x = SoftThresholdLayer()(x)
 
     x = layers.Conv2D(8, 3, activation='relu', padding='same')(x)
     x = layers.Conv2D(4, 3, activation='relu', padding='same')(x)
@@ -66,10 +66,6 @@ def create_model(input_shape):
     return model
 
 
-@tf.function
-@keras.saving.register_keras_serializable()
-def ssim_loss(y_true, y_pred):
-    return 1 - tf.reduce_mean(tf.image.ssim(y_true, y_pred, max_val=1.0))
 
 
 @tf.function
@@ -109,6 +105,10 @@ def loss_func(y_true, y_pred):
 
     # Calculate the initial sum of losses
     L_initial = BCE_initial + MSE_initial + Edge_initial
+    epsilon = tf.keras.backend.epsilon()  # Small constant
+
+    # Prevent division by zero
+    L_initial = tf.maximum(L_initial, epsilon)
 
     # Normalize each loss based on current values
     normalized_bce = (bce / L_initial) * BCE_initial
