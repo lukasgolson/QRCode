@@ -2,15 +2,19 @@ import keras
 import tensorflow as tf
 from keras import Layer, Sequential, Input, Model
 from keras.src.layers import Conv2D, Flatten, Dense, Reshape, LeakyReLU, MaxPooling2D, BatchNormalization, Dropout, \
-    SpatialDropout2D
+    SpatialDropout2D, Add, Concatenate
 
 
 class SpatialTransformer(Layer):
-    def __init__(self, passthrough=False, **tfwargs):
+    def __init__(self, output_intermediaries=True, **tfwargs):
         super(SpatialTransformer, self).__init__(**tfwargs)
         # Define the localization networtf parameters
-        self.passthrough = passthrough
+
+        self.output_intermediaries = output_intermediaries
         self.localization_network = None
+        self.trans_param_network = None
+
+        self.concatenate_layer = None
 
     def create_localization_network(self, input_shape):
         # Define the input layer
@@ -26,8 +30,16 @@ class SpatialTransformer(Layer):
         x = Conv2D(6, (3, 3), padding='same', activation='relu')(x)
         x = MaxPooling2D()(x)
 
+        outputs = x
+
+        # Create the model
+        return Model(inputs=inputs, outputs=outputs)
+
+    def create_transformation_paramater_network(self, input_shape):
+        inputs = Input(shape=input_shape)
+
         # Flatten and Dense layers for final transformation parameters
-        x = Flatten()(x)
+        x = Flatten()(inputs)
         x = BatchNormalization()(x)
         x = Dense(64, activation='relu')(x)
         x = Dropout(0.2)(x)
@@ -38,10 +50,7 @@ class SpatialTransformer(Layer):
         outputs = Dense(6, activation='linear', kernel_initializer='zeros',
                         bias_initializer=tf.constant_initializer([1, 0, 0, 0, 1, 0]))(x)
 
-        # Create the model
-        model = Model(inputs=inputs, outputs=outputs)
-
-        return model
+        return Model(inputs=inputs, outputs=outputs)
 
     def build(self, input_shape):
         self.input_shape = input_shape
@@ -50,7 +59,24 @@ class SpatialTransformer(Layer):
 
         self.localization_network.build(input_shape)
 
+        localization_network_output_shape = self.localization_network.compute_output_shape(input_shape)
+
+        self.trans_param_network = self.create_transformation_paramater_network(localization_network_output_shape[1:])
+
+        self.trans_param_network.build(localization_network_output_shape)
+
+        if self.output_intermediaries:
+            self.concatenate_layer = Concatenate()
+            self.concatenate_layer.build([input_shape, localization_network_output_shape])
+
         super(SpatialTransformer, self).build(input_shape)
+
+    def compute_output_shape(self, input_shape):
+        if self.output_intermediaries:
+            return self.concatenate_layer.compute_output_shape(
+                [input_shape, self.localization_network.compute_output_shape(input_shape)])
+        else:
+            return input_shape  # Output shape is the same as input image shape
 
     @tf.function
     def call(self, inputs):
@@ -58,13 +84,15 @@ class SpatialTransformer(Layer):
         x = inputs  # x is the input image/feature map
 
         # Reduce channels by taking the average across the channel dimension
-        x = tf.reduce_mean(x, axis=-1, keepdims=True)  # Shape: (batch_size, height, width)
+        # x = tf.reduce_mean(x, axis=-1, keepdims=True)  # Shape: (batch_size, height, width)
 
-        # Predict transformation parameters using the localization network
-        theta = self.localization_network(x)  # Should have shape (batch_size, 6)
+        theta, x_transformed = self.localization_network(x)
 
         # Generate a grid of coordinates
         grid = self._generate_grid(theta, self.input_shape[0:3])  # Get height and width from input shape
+
+        if self.output_intermediaries:
+            x = self.concatenate_layer([x, x_transformed])
 
         # Sample the input using the generated grid
         x_transformed = self._sampler(x, grid)
@@ -73,13 +101,14 @@ class SpatialTransformer(Layer):
     def get_config(self):
         base_config = super(SpatialTransformer, self).get_config()
         config = {
-            'passthrough': self.passthrough
+            'output_intermediaries': self.output_intermediaries
         }
         return {**base_config, **config}
 
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
 
     @tf.function
     def _generate_grid(self, theta, output_size):
@@ -129,6 +158,7 @@ class SpatialTransformer(Layer):
         #   print(f"Reshaped transformed grid shape: {reshaped.shape}")  # Should be (batch_size, height, width, 2)
 
         return reshaped
+
 
     @tf.function
     def _sampler(self, img, grid):
@@ -180,6 +210,3 @@ class SpatialTransformer(Layer):
         sampled_img = wa[:, :, :, None] * Ia + wb[:, :, :, None] * Ib + wc[:, :, :, None] * Ic + wd[:, :, :, None] * Id
 
         return sampled_img
-
-    def compute_output_shape(self, input_shape):
-        return input_shape  # Output shape is the same as input image shape

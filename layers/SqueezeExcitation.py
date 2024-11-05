@@ -4,16 +4,24 @@ from keras.src import initializers, layers
 from keras.src.layers import Dense, GlobalAveragePooling2D, Reshape, Multiply, Add, BatchNormalization, Activation
 import tensorflow as tf
 
+
 @keras.saving.register_keras_serializable(package="qr_model", name="SqueezeExcitation")
 class SqueezeExcitation(Layer):
     def __init__(self, ratio=16, use_residual=True, **kwargs):
         super(SqueezeExcitation, self).__init__(**kwargs)
+
         self.activation = None
         self.dense2 = None
         self.dense1 = None
         self.channels = None
         self.ratio = ratio
         self.use_residual = use_residual
+
+        self.multiply_layer = Multiply()
+
+        self.reshape_layer = Reshape((1, 1, self.channels))
+
+        self.add_layer = Add()
 
         if self.use_residual:
             self.batch_norm = BatchNormalization(name='batch_norm')
@@ -43,12 +51,12 @@ class SqueezeExcitation(Layer):
         se = self.activation(se)
         se = self.dense2(se)
         # Reshape to match input shape
-        se = Reshape((1, 1, self.channels))(se)
+        se = self.reshape_layer(se)
 
-        se = Multiply()([inputs, se])
+        se = self.multiply_layer([inputs, se])
 
         if self.use_residual:
-            se = Add()([inputs, se])
+            se = self.add_layer([inputs, se])
             se = self.batch_norm(se)
             se = self.residual_activation(se)
 

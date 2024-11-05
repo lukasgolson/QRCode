@@ -2,6 +2,7 @@ import keras
 from keras.layers import Conv2D, Multiply, Activation, Add, BatchNormalization, Concatenate
 import tensorflow as tf
 
+
 @keras.saving.register_keras_serializable(package="qr_model", name="SpatialAttention")
 class SpatialAttention(keras.layers.Layer):
     def __init__(self, num_layers=3, initial_filters=3, filter_step=3, use_residual=True, **kwargs):
@@ -26,7 +27,7 @@ class SpatialAttention(keras.layers.Layer):
 
         for i in range(num_layers):
             filters = initial_filters + i * filter_step
-            self.convs.append(Conv2D(filters=filters, kernel_size=3, padding='same', name=f'conv{i+1}'))
+            self.convs.append(Conv2D(filters=filters, kernel_size=3, padding='same', name=f'conv{i + 1}'))
             self.activations.append(Activation('relu'))
 
         self.conv_pooling = Conv2D(filters=1, kernel_size=1, padding='same', name='conv_pooling')
@@ -34,6 +35,9 @@ class SpatialAttention(keras.layers.Layer):
         self.concatenate = Concatenate(axis=-1)
         self.batch_norm = BatchNormalization(name='batch_norm')
         self.residual_activation = Activation('relu')
+
+        self.multiply_layer = Multiply()
+        self.add_layer = Add()
 
     def build(self, input_shape):
         attention_map_shapes = [input_shape]
@@ -62,10 +66,10 @@ class SpatialAttention(keras.layers.Layer):
         x = self.concatenate(attention_maps[1:])
         x = self.conv_pooling(x)
         x = self.final_activation(x)
-        x = Multiply()([x, inputs])
+        x = self.multiply_layer([x, inputs])
 
         if self.use_residual:
-            x = Add()([inputs, x])
+            x = self.add_layer([inputs, x])
             x = self.batch_norm(x)
             x = self.residual_activation(x)
 
