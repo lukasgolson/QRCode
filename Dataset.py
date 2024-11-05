@@ -35,8 +35,11 @@ def dirty_qr_code(img, max_shift=30, max_rotation=60, noise_range=(1, 75)):
 
 
 def add_random_image_noise(image, noise_range=(1, 255)):
-    noise_factor = random.randint(noise_range[0], noise_range[1])
+    noise_factor = random.randint(noise_range[0], noise_range[1] + 1)
     np_image = np.array(image)
+
+
+
     noise = np.random.randint(-noise_factor, noise_factor, np_image.shape)
     noisy_image = np_image + noise
     noisy_image = np.clip(noisy_image, 0, 255)
@@ -118,7 +121,7 @@ def load_qr_code_data(target_size, encoder=None, paired=False, clean_image_every
         max_rotation = int(max_epoch_rotation * batch_multiplier)
         noise_range = (
             int(max_epoch_noise_range[0] * batch_multiplier),
-            int(max_epoch_noise_range[1] * batch_multiplier)
+            int(max_epoch_noise_range[1] * batch_multiplier) + 1
         )
 
         content, clean, dirty = generate_qr_code(repeats=1,
