@@ -41,13 +41,15 @@ def create_model(input_shape):
 
     # Apply spatial transformer to the input image
     x = SpatialTransformer()(inputs)
+    x = SqueezeExcitation()(x)
+
 
     x = SpatialAttention()(x)
 
     # Apply convolutional layers
-    x = Conv2DSkip(x, 3, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 6, 3, activation='relu', padding='same')
     x = SqueezeExcitation()(x)
-    x = Conv2DSkip(x, 3, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 12, 3, activation='relu', padding='same')
 
 
     x = SoftThresholdLayer()(x)
@@ -93,10 +95,10 @@ def edge_loss(y_true, y_pred):
 @tf.function
 @keras.saving.register_keras_serializable()
 def loss_func(y_true, y_pred):
-    alpha = 0.2
+    alpha = 0
     # beta = 0.3
-    gamma = 0.2
-    epsilon = 0.3
+    gamma = 1
+    epsilon = 0
     mse = mse_loss(y_true, y_pred)
     # ssim = ssim_loss(y_true, y_pred)
     bce = binarized_bce_loss(y_true, y_pred)

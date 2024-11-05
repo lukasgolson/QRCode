@@ -21,13 +21,13 @@ class SpatialTransformer(Layer):
         inputs = Input(shape=input_shape)
 
         # Convolutional layers for feature extraction with batch normalization and dropout
-        x = Conv2D(6, (3, 3), padding='same', activation='relu')(inputs)
+        x = Conv2D(8, (3, 3), padding='same', activation='relu')(inputs)
         x = MaxPooling2D()(x)
 
         x = Conv2D(16, (3, 3), padding='same', activation='relu')(x)
         x = MaxPooling2D()(x)
 
-        x = Conv2D(6, (3, 3), padding='same', activation='relu')(x)
+        x = Conv2D(31, (3, 3), padding='same', activation='relu')(x) # only 31 to allow for the 1 original channel
         x = MaxPooling2D()(x)
 
         outputs = x
