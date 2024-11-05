@@ -1,4 +1,5 @@
 import argparse
+import datetime
 
 import keras
 from keras import Model
@@ -172,9 +173,13 @@ def train_model(resolution=256, epochs=100, batch_size=64, jit=False):
     # Create the model
     input_shape = (resolution, resolution, 1)
 
+
+    log_dir = "logs/fit/ImageCleanModel/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+
     with strategy.scope():
         callbacks = [
-            TensorBoard(log_dir="image_clean", histogram_freq=1, write_graph=True, write_images=False,
+            TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=False,
                         update_freq='epoch'),
             RollingAverageModelCheckpoint(
                 filepath='best_model.keras',
