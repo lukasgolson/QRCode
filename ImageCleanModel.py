@@ -43,8 +43,6 @@ def create_model(input_shape):
     # Apply spatial transformer to the input image
     x = SpatialTransformer()(inputs)
     x = SqueezeExcitation()(x)
-
-
     x = SpatialAttention()(x)
 
     # Apply convolutional layers
@@ -55,8 +53,8 @@ def create_model(input_shape):
     x = BatchNormalization()(x)
     x = SoftThresholdLayer()(x)
 
+    x = layers.Conv2D(16, 3, activation='relu', padding='same')(x)
     x = layers.Conv2D(8, 3, activation='relu', padding='same')(x)
-    x = layers.Conv2D(4, 3, activation='relu', padding='same')(x)
 
     output = layers.Conv2D(1, 1, activation='linear', padding='same')(x)
 
@@ -64,8 +62,6 @@ def create_model(input_shape):
     model = Model(inputs, output, name='qr_correction_model')
 
     return model
-
-
 
 
 @tf.function
@@ -160,7 +156,7 @@ def train_model(resolution=256, epochs=100, batch_size=64, jit=False):
             jit = "auto"
 
         # Compile the model
-        model.compile(optimizer=optimizer, loss=loss_func, metrics=["mse"],
+        model.compile(optimizer=optimizer, loss="mse",
                       jit_compile=jit)
 
         model.summary()
