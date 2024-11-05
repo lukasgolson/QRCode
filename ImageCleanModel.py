@@ -44,14 +44,16 @@ def create_model(input_shape):
     x = SpatialTransformer()(inputs)
     x = SqueezeExcitation()(x)
     x = SpatialAttention()(x)
+    x = BatchNormalization()(x)
 
-    # Apply convolutional layers
+
+# Apply convolutional layers
     x = Conv2DSkip(x, 16, 3, activation='relu', padding='same')
     x = SqueezeExcitation()(x)
     x = Conv2DSkip(x, 16, 3, activation='relu', padding='same')
 
     x = BatchNormalization()(x)
-    x = SoftThresholdLayer()(x)
+    #x = SoftThresholdLayer()(x)
 
     x = layers.Conv2D(16, 3, activation='relu', padding='same')(x)
     x = layers.Conv2D(8, 3, activation='relu', padding='same')(x)
