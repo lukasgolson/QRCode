@@ -95,15 +95,33 @@ def edge_loss(y_true, y_pred):
 @tf.function
 @keras.saving.register_keras_serializable()
 def loss_func(y_true, y_pred):
-    alpha = 0
-    # beta = 0.3
-    gamma = 0
-    epsilon = 1
+    # Define initial empirical loss values
+    BCE_initial = 10.38
+    MSE_initial = 0.768
+    Edge_initial = 1.87
+
+    # Compute the current loss values
     mse = mse_loss(y_true, y_pred)
-    # ssim = ssim_loss(y_true, y_pred)
     bce = binarized_bce_loss(y_true, y_pred)
     edge = edge_loss(y_true, y_pred)
-    return alpha * mse + gamma * bce + epsilon * edge
+
+    # Calculate the initial sum of losses
+    L_initial = BCE_initial + MSE_initial + Edge_initial
+
+    # Normalize each loss based on current values
+    normalized_bce = (bce / L_initial) * BCE_initial
+    normalized_mse = (mse / L_initial) * MSE_initial
+    normalized_edge = (edge / L_initial) * Edge_initial
+
+    # weights
+    alpha = 0.5  # Weight for MSE
+    gamma = 1  # Weight for BCE
+    epsilon = 0.5  # Weight for Edge
+
+    # Compute the composite loss
+    composite_loss = alpha * normalized_mse + gamma * normalized_bce + epsilon * normalized_edge
+
+    return composite_loss
 
 
 def train_model(resolution=256, epochs=100, batch_size=64, jit=False):
