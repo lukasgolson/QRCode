@@ -1,43 +1,52 @@
 import keras
 import tensorflow as tf
-from keras import Layer, Sequential
+from keras import Layer, Sequential, Input, Model
 from keras.src.layers import Conv2D, Flatten, Dense, Reshape, LeakyReLU, MaxPooling2D, BatchNormalization, Dropout, \
     SpatialDropout2D
 
 
 class SpatialTransformer(Layer):
-    def __init__(self, **tfwargs):
+    def __init__(self, passthrough=False, **tfwargs):
         super(SpatialTransformer, self).__init__(**tfwargs)
         # Define the localization networtf parameters
+        self.passthrough = passthrough
         self.localization_network = None
+
+    def create_localization_network(self, input_shape):
+        # Define the input layer
+        inputs = Input(shape=input_shape)
+
+        # Convolutional layers for feature extraction with batch normalization and dropout
+        x = Conv2D(6, (3, 3), padding='same', activation='relu')(inputs)
+        x = MaxPooling2D()(x)
+
+        x = Conv2D(16, (3, 3), padding='same', activation='relu')(x)
+        x = MaxPooling2D()(x)
+
+        x = Conv2D(6, (3, 3), padding='same', activation='relu')(x)
+        x = MaxPooling2D()(x)
+
+        # Flatten and Dense layers for final transformation parameters
+        x = Flatten()(x)
+        x = BatchNormalization()(x)
+        x = Dense(64, activation='relu')(x)
+        x = Dropout(0.2)(x)
+        x = Dense(96, activation='relu')(x)
+        x = Dropout(0.2)(x)
+
+        # Output layer initialized to identity transformation
+        outputs = Dense(6, activation='linear', kernel_initializer='zeros',
+                        bias_initializer=tf.constant_initializer([1, 0, 0, 0, 1, 0]))(x)
+
+        # Create the model
+        model = Model(inputs=inputs, outputs=outputs)
+
+        return model
 
     def build(self, input_shape):
         self.input_shape = input_shape
 
-        self.localization_network = Sequential([
-            # Convolutional layers for feature extraction with batch normalization and dropout
-            Conv2D(6, (3, 3), padding='same', activation='relu'),
-            MaxPooling2D(),
-
-            Conv2D(16, (3, 3), padding='same', activation='relu'),
-            MaxPooling2D(),
-
-            Conv2D(6, (3, 3), padding='same', activation='relu'),
-            MaxPooling2D(),
-
-            # Flatten and Dense layers for final transformation parameters
-            Flatten(),
-            BatchNormalization(),
-            Dense(64, activation='relu'),
-            Dropout(0.2),
-            Dense(96, activation='relu'),
-            Dropout(0.2),
-
-            # Output layer initialized to identity transformation
-            Dense(6, activation='linear', kernel_initializer='zeros',
-                  bias_initializer=tf.constant_initializer([1, 0, 0, 0, 1, 0]))
-        ])
-
+        self.localization_network = self.create_localization_network(input_shape[1:])
 
         self.localization_network.build(input_shape)
 
@@ -60,6 +69,17 @@ class SpatialTransformer(Layer):
         # Sample the input using the generated grid
         x_transformed = self._sampler(x, grid)
         return x_transformed
+
+    def get_config(self):
+        base_config = super(SpatialTransformer, self).get_config()
+        config = {
+            'passthrough': self.passthrough
+        }
+        return {**base_config, **config}
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
 
     @tf.function
     def _generate_grid(self, theta, output_size):
