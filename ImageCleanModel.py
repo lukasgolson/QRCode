@@ -7,6 +7,7 @@ from keras.src import layers
 import tensorflow as tf
 from keras import backend as K
 from keras.src.callbacks import ModelCheckpoint
+from keras.src.layers import BatchNormalization
 from keras.src.optimizers import Adafactor
 from tensorflow.keras.callbacks import TensorBoard
 
@@ -51,7 +52,7 @@ def create_model(input_shape):
     x = SqueezeExcitation()(x)
     x = Conv2DSkip(x, 16, 3, activation='relu', padding='same')
 
-
+    x = BatchNormalization()(x)
     x = SoftThresholdLayer()(x)
 
     x = layers.Conv2D(8, 3, activation='relu', padding='same')(x)

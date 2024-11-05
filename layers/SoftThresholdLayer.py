@@ -20,8 +20,16 @@ class SoftThresholdLayer(Layer):
         super(SoftThresholdLayer, self).build(input_shape)
 
     def call(self, inputs):
-        soft_thresholded = tf.maximum(0.0, inputs - tf.expand_dims(self.threshold, axis=0)) - \
-                           tf.maximum(0.0, -inputs - tf.expand_dims(self.threshold, axis=0))
+        def smooth_max(x):
+            return tf.log(1 + tf.exp(x))
+
+            # Calculate the smooth thresholded values
+
+        positive_part = smooth_max(inputs - tf.expand_dims(self.threshold, axis=0))
+        negative_part = smooth_max(-inputs - tf.expand_dims(self.threshold, axis=0))
+
+        soft_thresholded = positive_part - negative_part
+
         return soft_thresholded
 
     def get_config(self):
