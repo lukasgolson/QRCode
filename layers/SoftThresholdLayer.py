@@ -21,7 +21,7 @@ class SoftThresholdLayer(Layer):
 
     def call(self, inputs):
         def smooth_max(x):
-            return tf.log(1 + tf.exp(x))
+            return tf.math.log(1 + tf.math.exp(x))
 
             # Calculate the smooth thresholded values
 
