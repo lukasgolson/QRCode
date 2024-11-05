@@ -95,7 +95,7 @@ def normalize_image(image, target_size=(512, 512)):
     return np.array(image.convert('L')).reshape((target_size[0], target_size[1], 1)) / 255.0
 
 
-def load_qr_code_data(target_size, encoder=None, paired=False, clean_image_every_n=8, initial_noise=(1, 10, 5),
+def load_qr_code_data(target_size, encoder=None, paired=False, clean_image_every_n=8, initial_noise=(1, 1, 1),
                       total_epochs=60, batches_per_epoch=512):
     """Infinite generator to create QR codes with progressively increasing noise, maxing out by the end of the epochs."""
     image_count = 0
@@ -151,7 +151,8 @@ def create_dataset(target_size=(512, 512), batch_size=32, shuffle=True, max_seq_
     encoder = CharLevelEncoder(max_sequence_length=max_seq_len, num_chars=num_chars)  # Initialize encoder
 
     dataset = tf.data.Dataset.from_generator(
-        lambda: load_qr_code_data(target_size, encoder=encoder, paired=paired, clean_image_every_n=8, initial_noise=(0, 0, 0), total_epochs=20, batches_per_epoch=512),
+        lambda: load_qr_code_data(target_size, encoder=encoder, paired=paired, clean_image_every_n=8,
+                                  initial_noise=(1, 1, 1), total_epochs=20, batches_per_epoch=512),
         output_signature=(
             tf.TensorSpec(shape=(target_size[0], target_size[1], 1), dtype=tf.float32),  # X (dirty QR code)
             tf.TensorSpec(shape=(target_size[0], target_size[1], 1), dtype=tf.float32) if paired else
