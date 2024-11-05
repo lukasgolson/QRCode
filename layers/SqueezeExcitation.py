@@ -19,7 +19,7 @@ class SqueezeExcitation(Layer):
 
         self.multiply_layer = Multiply()
 
-        self.reshape_layer = Reshape((1, 1, self.channels))
+
 
         self.add_layer = Add()
 
@@ -51,7 +51,7 @@ class SqueezeExcitation(Layer):
         se = self.activation(se)
         se = self.dense2(se)
         # Reshape to match input shape
-        se = self.reshape_layer(se)
+        se = Reshape((1, 1, self.channels))(se)
 
         se = self.multiply_layer([inputs, se])
 
