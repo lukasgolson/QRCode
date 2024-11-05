@@ -45,13 +45,10 @@ def create_model(input_shape):
     x = SpatialAttention()(x)
 
     # Apply convolutional layers
-    x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
-    x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 3, 3, activation='relu', padding='same')
     x = SqueezeExcitation()(x)
+    x = Conv2DSkip(x, 3, 3, activation='relu', padding='same')
 
-    x = Conv2DSkip(x, 9, 3, activation='relu', padding='same')
-
-    x = SqueezeExcitation()(x)
 
     x = SoftThresholdLayer()(x)
 
