@@ -54,7 +54,8 @@ def create_model(input_shape):
 
     x = SoftThresholdLayer()(x)
 
-    x = layers.Conv2D(1, 1, activation='relu', padding='same')(x)
+    x = layers.Conv2D(8, 3, activation='relu', padding='same')(x)
+    x = layers.Conv2D(4, 3, activation='relu', padding='same')(x)
 
     output = layers.Conv2D(1, 1, activation='linear', padding='same')(x)
 
