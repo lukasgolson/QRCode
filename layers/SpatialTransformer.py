@@ -96,7 +96,9 @@ class SpatialTransformer(Layer):
         # Reduce channels by taking the average across the channel dimension
         # x = tf.reduce_mean(x, axis=-1, keepdims=True)  # Shape: (batch_size, height, width)
 
-        theta, x_transformed = self.localization_network(x)
+        x_transformed = self.localization_network(x)
+
+        theta = self.trans_param_network(x_transformed)
 
         # Generate a grid of coordinates
         grid = self._generate_grid(theta, self.input_shape[0:3])  # Get height and width from input shape
