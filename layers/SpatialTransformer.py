@@ -67,7 +67,17 @@ class SpatialTransformer(Layer):
 
         if self.output_intermediaries:
             self.concatenate_layer = Concatenate(axis=-1)
-            self.concatenate_layer.build([input_shape, localization_network_output_shape])
+
+            # Determine the number of channels from the localization network output
+            localized_channels = localization_network_output_shape[-1]
+
+            # Define the shape for the resized localized output
+            # Make sure to match the height and width of the original input shape
+            resized_localized_shape = (input_shape[0], input_shape[1], input_shape[2], localized_channels)
+
+            # Build the concatenate layer with the correct input shapes
+            self.concatenate_layer.build([input_shape, resized_localized_shape])
+
 
         super(SpatialTransformer, self).build(input_shape)
 
