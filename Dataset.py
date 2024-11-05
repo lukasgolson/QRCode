@@ -40,7 +40,7 @@ def add_random_image_noise(image, noise_range=(1, 255)):
 
 
 
-    noise = np.random.randint(-noise_factor, noise_factor, np_image.shape)
+    noise = np.random.randint(-noise_factor, noise_factor +1, np_image.shape)
     noisy_image = np_image + noise
     noisy_image = np.clip(noisy_image, 0, 255)
     return Image.fromarray(noisy_image.astype('uint8'))
@@ -117,8 +117,8 @@ def load_qr_code_data(target_size, encoder=None, paired=False, clean_image_every
 
         # Calculate noise for the current batch within the epoch
         batch_multiplier = min(batch_in_epoch / (batches_per_epoch - 1), 1)  # Scales from 0 to 1 within each epoch
-        max_shift = int(max_epoch_shift * batch_multiplier)
-        max_rotation = int(max_epoch_rotation * batch_multiplier)
+        max_shift = int(max_epoch_shift * batch_multiplier) + 1
+        max_rotation = int(max_epoch_rotation * batch_multiplier) + 1
         noise_range = (
             int(max_epoch_noise_range[0] * batch_multiplier),
             int(max_epoch_noise_range[1] * batch_multiplier) + 1
