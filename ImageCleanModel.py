@@ -101,6 +101,9 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
     logs = {}
     callback_list.on_train_begin(logs=logs)
 
+    generator.compile(optimizer=gen_optimizer, loss='binary_crossentropy')
+    discriminator.compile(optimizer=disc_optimizer, loss='binary_crossentropy')
+
     for epoch in range(epochs):
         callback_list.on_epoch_begin(epoch, logs=logs)
 
