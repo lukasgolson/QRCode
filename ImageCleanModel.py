@@ -85,12 +85,13 @@ def create_discriminator(input_shape):
 @keras.saving.register_keras_serializable()
 def mse_loss(y_true, y_pred):
     return tf.reduce_mean(tf.square(y_true - y_pred))
-def train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, val_dataset, epochs, callbacks, steps_per_epoch=250):
+def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks, steps_per_epoch=250, steps_per_val=10):
     for epoch in range(epochs):
         print(f"Epoch {epoch + 1}/{epochs}")
 
         # Limit the number of steps per epoch if specified
         steps_in_epoch = steps_per_epoch or len(dataset)
+        steps_in_val = steps_per_val or len(val_dataset)
 
         for step, (clean_images, dirty_images) in enumerate(dataset.take(steps_in_epoch)):  # Use .take to limit steps
             # Generate transformed images
@@ -117,7 +118,7 @@ def train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, v
 
             # Get discriminator gradients and apply them
             grads_d = tape_d.gradient(d_loss, discriminator.trainable_variables)
-            adv_optimizer.apply_gradients(zip(grads_d, discriminator.trainable_variables))
+            disc_optimizer.apply_gradients(zip(grads_d, discriminator.trainable_variables))
 
             # Train Generator (via GAN model) manually
             with tf.GradientTape() as tape_g:
@@ -136,7 +137,7 @@ def train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, v
         # Validation step
         val_mse = 0
         val_step = 0  # Initialize the val_step variable
-        for val_step, (val_real_images, val_dirty_images) in enumerate(val_dataset):
+        for val_step, (val_real_images, val_dirty_images) in enumerate(dataset.take(steps_in_val)):
             val_fake_images = generator(val_dirty_images, training=False)
             # Accumulate the squared differences (MSE)
             val_mse += tf.reduce_mean(tf.square(val_real_images - val_fake_images)).numpy()
