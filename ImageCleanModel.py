@@ -98,13 +98,15 @@ def train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, v
 
             # Train Discriminator manually
             with tf.GradientTape() as tape_d:
-                # Apply label smoothing
-                real_labels = tf.ones_like(real_pred) * 0.9  # Smooth real labels to 0.9 instead of 1
-                fake_labels = tf.zeros_like(fake_pred) + 0.1  # Smooth fake labels to 0.1 instead of 0
+
 
                 # Get predictions from the discriminator
                 real_pred = discriminator(clean_images, training=True)
                 fake_pred = discriminator(transformed_images, training=True)
+
+                # Apply label smoothing
+                real_labels = tf.ones_like(real_pred) * 0.9  # Smooth real labels to 0.9 instead of 1
+                fake_labels = tf.zeros_like(fake_pred) + 0.1  # Smooth fake labels to 0.1 instead of 0
 
                 # Discriminator loss (binary cross-entropy)
                 d_loss_real = tf.keras.losses.binary_crossentropy(real_labels, real_pred)
