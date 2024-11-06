@@ -86,7 +86,7 @@ def create_discriminator(input_shape):
 def mse_loss(y_true, y_pred):
     return tf.reduce_mean(tf.square(y_true - y_pred))
 
-
+@tf.function
 def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
               log_interval=10, steps_per_epoch=250, steps_per_val=10):
     # turn callbacks into a list
