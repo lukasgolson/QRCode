@@ -89,6 +89,10 @@ def mse_loss(y_true, y_pred):
 
 def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
               log_interval=10, steps_per_epoch=250, steps_per_val=10):
+    callbacks = [callback for callback in callbacks if not isinstance(callback, ModelCheckpoint)]
+
+    print("Callbacks: ", callbacks)
+
     callback_list = tf.keras.callbacks.CallbackList(
         callbacks, add_history=True, model=generator)
 
@@ -198,6 +202,7 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
 
     generator.save('qr_correction_model.keras')
     discriminator.save('discriminator_model.keras')
+
 
 if __name__ == '__main__':
     # get batch size argument
