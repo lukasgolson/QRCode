@@ -86,7 +86,19 @@ def create_discriminator(input_shape):
 def mse_loss(y_true, y_pred):
     return tf.reduce_mean(tf.square(y_true - y_pred))
 def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks, log_interval=10, steps_per_epoch=250, steps_per_val=10):
+
+    _callbacks = []
+
+    callbacks = tf.keras.callbacks.CallbackList(
+    _callbacks, add_history=True, model=generator)
+
+    logs = {}
+    callbacks.on_train_begin(logs=logs)
+
+
     for epoch in range(epochs):
+        callbacks.on_epoch_begin(epoch, logs=logs)
+
         print(f"Epoch {epoch + 1}/{epochs}")
 
         # Limit the number of steps per epoch if specified
@@ -95,13 +107,16 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
 
         for step, (clean_images, dirty_images) in enumerate(dataset.take(steps_in_epoch)):  # Use .take to limit steps
             # Generate transformed images
+
+            callbacks.on_batch_begin(step, logs=logs)
+            callbacks.on_train_batch_begin(step, logs=logs)
+
             transformed_images = generator(dirty_images, training=True)
+
+
 
             # Train Discriminator manually
             with tf.GradientTape() as tape_d:
-
-
-                # Get predictions from the discriminator
                 real_pred = discriminator(clean_images, training=True)
                 fake_pred = discriminator(transformed_images, training=True)
 
@@ -120,6 +135,8 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
             grads_d = tape_d.gradient(d_loss, discriminator.trainable_variables)
             disc_optimizer.apply_gradients(zip(grads_d, discriminator.trainable_variables))
 
+
+
             # Train Generator (via GAN model) manually
             with tf.GradientTape() as tape_g:
                 generated_images = generator(dirty_images, training=True)
@@ -130,6 +147,14 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
             # Get generator gradients and apply them
             grads_g = tape_g.gradient(g_loss, generator.trainable_variables)
             gen_optimizer.apply_gradients(zip(grads_g, generator.trainable_variables))
+
+            # Trigger callbacks
+
+            logs = {'d_loss': d_loss, 'g_loss': g_loss}
+
+
+            callbacks.on_train_batch_end(step, logs=logs)
+            callbacks.on_batch_end(step, logs=logs)
 
             if step % log_interval == 0:
                 print(f"Step: {step + 1}/{steps_in_epoch}, D Loss: {d_loss:.4f}, G Loss: {g_loss:.4f}")
@@ -147,12 +172,11 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
         print(f"Validation MSE after Epoch {epoch + 1}: {val_mse:.4f}")
 
         # Trigger callbacks
-        logs = {'loss': g_loss, 'val_mse': val_mse}
-        for callback in callbacks:
-            callback.on_epoch_end(epoch, logs=logs)
+        logs = {'d_loss': d_loss, 'g_loss': g_loss, 'val_mse': val_mse}
+        callbacks.on_epoch_end(epoch, logs=logs)
 
-    for callback in callbacks:
-        callback.on_train_end(None)
+    callbacks.on_train_end(logs=logs)
+
 
 
 
@@ -166,8 +190,11 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
     dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
     val_dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
 
+    tb =         TensorBoard(log_dir="logs/fit/ImageCleanModel/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")),
+
+
     callbacks = [
-        TensorBoard(log_dir="logs/fit/ImageCleanModel/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")),
+        tb,
         RollingAverageModelCheckpoint(filepath='best_model.keras', monitor='loss', save_best_only=True, mode='min')
     ]
 
