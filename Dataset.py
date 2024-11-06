@@ -97,9 +97,7 @@ def normalize_image(image, target_size=(512, 512)):
 
 
 def load_qr_code_data(target_size, batch_size=32, batches_per_epoch=512, encoder=None, paired=False,
-                      clean_image_every_n=8,
-                      initial_noise=(1, 1, 1),
-                      noisiest_epoch=60):
+                      clean_image_every_n=8, initial_noise=(1, 1, 1), noisiest_epoch=60, batch_ramping=False):
     """Infinite generator to create QR codes with progressively increasing noise, maxing out by the end of the epochs."""
     image_count = 0
     images_per_epoch = batches_per_epoch * batch_size  # Images per epoch
@@ -107,19 +105,26 @@ def load_qr_code_data(target_size, batch_size=32, batches_per_epoch=512, encoder
     while True:
         # Determine the current epoch and batch within the epoch
         current_epoch = image_count // images_per_epoch
-        batch_in_epoch = (image_count % images_per_epoch) // 32
 
         if noisiest_epoch == 0:
             epoch_multiplier = 1
         else:
             # Calculate maximum noise level for the current epoch
             epoch_multiplier = min(current_epoch / (noisiest_epoch + 1e-8), 1)
+
+
         max_epoch_shift = epoch_multiplier * 20
         max_epoch_rotation = (epoch_multiplier * 180)
         max_epoch_noise_range = (epoch_multiplier * 100)
 
         # Calculate noise for the current batch within the epoch
-        batch_multiplier = min(batch_in_epoch / (batches_per_epoch - 1), 1)  # Scales from 0 to 1 within each epoch
+
+        if batch_ramping:
+            batch_in_epoch = (image_count % images_per_epoch) // 32
+            batch_multiplier = min(batch_in_epoch / (batches_per_epoch - 1), 1)  # Scales from 0 to 1 within each epoch
+        else:
+            batch_multiplier = 1
+
         max_shift = int(max_epoch_shift * batch_multiplier) + initial_noise[0]
         max_rotation = int(max_epoch_rotation * batch_multiplier) + initial_noise[1]
         noise_range = (
