@@ -85,7 +85,7 @@ def create_discriminator(input_shape):
 @keras.saving.register_keras_serializable()
 def mse_loss(y_true, y_pred):
     return tf.reduce_mean(tf.square(y_true - y_pred))
-def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks, steps_per_epoch=250, steps_per_val=10):
+def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks, log_interval=10, steps_per_epoch=250, steps_per_val=10):
     for epoch in range(epochs):
         print(f"Epoch {epoch + 1}/{epochs}")
 
@@ -131,7 +131,7 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
             grads_g = tape_g.gradient(g_loss, generator.trainable_variables)
             gen_optimizer.apply_gradients(zip(grads_g, generator.trainable_variables))
 
-            if step % 10 == 0:
+            if step % log_interval == 0:
                 print(f"Step: {step + 1}/{steps_in_epoch}, D Loss: {d_loss:.4f}, G Loss: {g_loss:.4f}")
 
         # Validation step
@@ -176,7 +176,7 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
 
     jit = jit if jit else "auto"
 
-    train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, val_dataset, epochs, callbacks)
+    train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, val_dataset, epochs, callbacks, steps_per_epoch=25, steps_per_val=10)
 
     generator.save('qr_correction_model.keras')
 
