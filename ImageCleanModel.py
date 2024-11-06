@@ -88,7 +88,7 @@ def mse_loss(y_true, y_pred):
 def train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, val_dataset, epochs, batch_size,
               resolution, callbacks, jit_compile="auto"):
     # Compile the discriminator for its own training
-    discriminator.compile(optimizer=adv_optimizer, loss='binary_crossentropy', metrics=['accuracy'],
+    discriminator.compile(optimizer=adv_optimizer, loss='binary_crossentropy',
                           jit_compile=jit_compile)
 
     # GAN Model (discriminator initially not trainable for generator updates)
@@ -96,7 +96,7 @@ def train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, v
     generated_image = generator(gan_input)
     gan_output = discriminator(generated_image)
     gan_model = Model(gan_input, gan_output)
-    gan_model.compile(optimizer=gen_optimizer, loss='binary_crossentropy', metrics=['accuracy'], jit_compile=jit_compile)
+    gan_model.compile(optimizer=gen_optimizer, loss='binary_crossentropy', jit_compile=jit_compile)
 
     for callback in callbacks:
         callback.set_model(gan_model)
