@@ -159,15 +159,20 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
             callback_list.on_train_batch_end(step, logs=logs)
 
             if step % log_interval == 0:
-                print(f"Step: {step + 1}/{steps_in_epoch}, D Loss: {d_loss:.4f}, G Loss: {g_loss:.4f}")
+                print(f"Step: {step}/{steps_in_epoch}, D Loss: {d_loss:.4f}, G Loss: {g_loss:.4f}")
 
         # Validation step
         val_mse = 0
         val_step = 0  # Initialize the val_step variable
         for val_step, (val_real_images, val_dirty_images) in enumerate(dataset.take(steps_in_val)):
+
+            callback_list.on_test_batch_begin(val_step, logs=logs)
+
             val_fake_images = generator(val_dirty_images, training=False)
             # Accumulate the squared differences (MSE)
             val_mse += tf.reduce_mean(tf.square(val_real_images - val_fake_images)).numpy()
+
+            callback_list.on_test_batch_end(val_step, logs=logs)
 
         # Average MSE over all validation steps
         val_mse /= (val_step + 1)  # `val_step` is the index of the last batch, so +1 for the total number of steps
@@ -202,7 +207,7 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
     jit = jit if jit else "auto"
 
     train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, val_dataset, epochs, callbacks,
-              steps_per_epoch=10, steps_per_val=10)
+              steps_per_epoch=250, steps_per_val=10)
 
     generator.save('qr_correction_model.keras')
     discriminator.save('discriminator_model.keras')
