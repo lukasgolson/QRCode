@@ -199,7 +199,6 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
     generator.save('qr_correction_model.keras')
     discriminator.save('discriminator_model.keras')
 
-
 if __name__ == '__main__':
     # get batch size argument
     parser = argparse.ArgumentParser()
