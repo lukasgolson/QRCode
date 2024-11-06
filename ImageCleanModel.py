@@ -13,6 +13,7 @@ from keras.src.optimizers import Adafactor
 from tensorflow.keras.callbacks import TensorBoard
 
 import Dataset
+from RollingAverageCheckpoint import RollingAverageModelCheckpoint
 from layers.SoftThresholdLayer import SoftThresholdLayer
 from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
@@ -37,7 +38,7 @@ def Conv2DSkip(input_layer, filters, kernel_size, activation='relu', padding='sa
     return layers.Activation(activation)(x)
 
 
-def create_model(input_shape):
+def create_generator(input_shape):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
@@ -47,23 +48,35 @@ def create_model(input_shape):
     x = SpatialAttention()(x)
     x = BatchNormalization()(x)
 
-
-# Apply convolutional layers
-    x = Conv2DSkip(x, 16, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 32, 3, activation='relu', padding='same')
     x = SqueezeExcitation()(x)
     x = Conv2DSkip(x, 16, 3, activation='relu', padding='same')
 
     x = BatchNormalization()(x)
-    #x = SoftThresholdLayer()(x)
+    # x = SoftThresholdLayer()(x)
 
-    x = layers.Conv2D(16, 3, activation='relu', padding='same')(x)
-    x = layers.Conv2D(8, 3, activation='relu', padding='same')(x)
+    x = Conv2DSkip(x, 8, 3, activation='relu', padding='same')
 
-    output = layers.Conv2D(1, 1, activation='linear', padding='same')(x)
+    output = layers.Conv2D(1, 1, activation='sigmoid', padding='same')(x)
 
     # Define the model
     model = Model(inputs, output, name='qr_correction_model')
 
+    return model
+
+
+def create_discriminator(input_shape):
+    inputs = layers.Input(shape=input_shape)
+    x = layers.Conv2D(64, 3, strides=2, padding='same')(inputs)
+    x = layers.LeakyReLU()(x)
+    x = layers.Conv2D(128, 3, strides=2, padding='same')(x)
+    x = layers.LeakyReLU()(x)
+    x = layers.Conv2D(256, 3, strides=2, padding='same')(x)
+    x = layers.LeakyReLU()(x)
+    x = layers.Flatten()(x)
+    x = layers.Dense(1, activation='sigmoid')(x)  # Output layer for binary classification
+
+    model = Model(inputs, x, name='discriminator_model')
     return model
 
 
@@ -72,112 +85,90 @@ def create_model(input_shape):
 def mse_loss(y_true, y_pred):
     return tf.reduce_mean(tf.square(y_true - y_pred))
 
+def train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, val_dataset, epochs, batch_size,
+              resolution, callbacks, jit_compile="auto"):
+    # Compile the discriminator for its own training
+    discriminator.compile(optimizer=adv_optimizer, loss='binary_crossentropy', metrics=['accuracy'],
+                          jit_compile=jit_compile)
 
-@tf.function
-@keras.saving.register_keras_serializable()
-def binarized_bce_loss(y_true, y_pred, threshold=0.5):
-    y_pred_binary = tf.cast(y_pred > threshold, tf.float32)
-    y_true_binary = tf.cast(y_true > threshold, tf.float32)
-    return tf.reduce_mean(tf.keras.losses.binary_crossentropy(y_true_binary, y_pred_binary))
+    # GAN Model (discriminator initially not trainable for generator updates)
+    gan_input = layers.Input(shape=(resolution, resolution, 1))
+    generated_image = generator(gan_input)
+    gan_output = discriminator(generated_image)
+    gan_model = Model(gan_input, gan_output)
+    gan_model.compile(optimizer=gen_optimizer, loss='binary_crossentropy', jit_compile=jit_compile)
 
+    for callback in callbacks:
+        callback.set_model(gan_model)
 
-@tf.function
-@keras.saving.register_keras_serializable()
-def edge_loss(y_true, y_pred):
-    y_true_edges = tf.image.sobel_edges(y_true)
-    y_pred_edges = tf.image.sobel_edges(y_pred)
-    return tf.reduce_mean(tf.square(y_true_edges - y_pred_edges))
+    g_loss = float('inf')
+    d_loss = float('inf')
 
+    for epoch in range(epochs):
+        print(f"Epoch {epoch + 1}/{epochs}")
 
-@tf.function
-@keras.saving.register_keras_serializable()
-def loss_func(y_true, y_pred):
-    # Define initial empirical loss values
-    BCE_initial = 10.38
-    MSE_initial = 0.768
-    Edge_initial = 1.87
+        for step, (clean_images, dirty_images) in enumerate(dataset):
+            # Generate transformed images
+            transformed_images = generator.predict(dirty_images)
 
-    # Compute the current loss values
-    mse = mse_loss(y_true, y_pred)
-    bce = binarized_bce_loss(y_true, y_pred)
-    edge = edge_loss(y_true, y_pred)
+            # Concatenate and shuffle
+            combined_images = tf.concat([clean_images, transformed_images], axis=0)
+            combined_labels = tf.concat([tf.ones((batch_size, 1)) * 0.9, tf.zeros((batch_size, 1))],
+                                        axis=0)  # Label smoothing
 
-    # Calculate the initial sum of losses
-    L_initial = BCE_initial + MSE_initial + Edge_initial
-    epsilon = tf.keras.backend.epsilon()  # Small constant
+            indices = tf.range(start=0, limit=tf.shape(combined_images)[0], dtype=tf.int32)
+            shuffled_indices = tf.random.shuffle(indices)
+            shuffled_images = tf.gather(combined_images, shuffled_indices)
+            shuffled_labels = tf.gather(combined_labels, shuffled_indices)
 
-    # Prevent division by zero
-    L_initial = tf.maximum(L_initial, epsilon)
+            # Split shuffled data back into batches of size batch_size
+            num_batches = 2
+            for i in range(num_batches):
+                start = i * batch_size
+                end = start + batch_size
+                d_loss = discriminator.train_on_batch(shuffled_images[start:end], shuffled_labels[start:end])
 
-    # Normalize each loss based on current values
-    normalized_bce = (bce / L_initial) * BCE_initial
-    normalized_mse = (mse / L_initial) * MSE_initial
-    normalized_edge = (edge / L_initial) * Edge_initial
+            # Train Generator
+            discriminator.trainable = False  # Freeze discriminator during generator training
+            g_loss = gan_model.train_on_batch(dirty_images, tf.ones((batch_size, 1)))
 
-    # weights
-    alpha = 0.5  # Weight for MSE
-    gamma = 1  # Weight for BCE
-    epsilon = 0.5  # Weight for Edge
+            print(f"Step: {step + 1}/{len(dataset)}, D Loss: {d_loss:.4f}, G Loss: {g_loss:.4f}")
 
-    # Compute the composite loss
-    composite_loss = alpha * normalized_mse + gamma * normalized_bce + epsilon * normalized_edge
+        # Validation
+        val_mse = 0
+        val_step = 0
+        for val_step, (val_real_images, val_dirty_images) in enumerate(val_dataset):
+            val_fake_images = generator.predict(val_dirty_images)
+            val_mse += tf.reduce_mean(tf.square(val_real_images - val_fake_images)).numpy()
 
-    return composite_loss
+        val_mse /= (val_step + 1)
+        print(f"Validation MSE after Epoch {epoch + 1}: {val_mse:.4f}")
 
+        # Trigger callbacks
+        logs = {'loss': g_loss, 'val_mse': val_mse}
+        for callback in callbacks:
+            callback.on_epoch_end(epoch, logs=logs)
 
-class RollingAverageModelCheckpoint(tf.keras.callbacks.Callback):
-    def __init__(self, filepath, monitor='loss', save_best_only=True, mode='min', verbose=1, rolling_epochs=10):
-        super(RollingAverageModelCheckpoint, self).__init__()
-        self.filepath = filepath
-        self.monitor = monitor
-        self.save_best_only = save_best_only
-        self.mode = mode
-        self.verbose = verbose
-        self.rolling_epochs = rolling_epochs
-        self.losses = []
-
-        if mode not in ['min', 'max']:
-            raise ValueError("Mode must be 'min' or 'max'")
-
-        self.best = float('inf') if mode == 'min' else -float('inf')
-        self.compare = lambda x, y: x < y if mode == 'min' else x > y
-
-    def on_epoch_end(self, epoch, logs=None):
-        logs = logs or {}
-        current_loss = logs.get(self.monitor)
-
-        if current_loss is None:
-            return
-
-        # Add current loss to the list and maintain the rolling window
-        self.losses.append(current_loss)
-        if len(self.losses) > self.rolling_epochs:
-            self.losses.pop(0)
-
-        # Calculate rolling average
-        rolling_average = sum(self.losses) / len(self.losses)
-
-        if self.compare(current_loss, rolling_average):
-            if self.verbose > 0:
-                print(
-                    f"\nEpoch {epoch + 1}: {self.monitor} improved from {rolling_average:.4f} to {current_loss:.4f}, saving model to {self.filepath}")
-            self.model.save(self.filepath)
-            self.best = current_loss
-        elif self.verbose > 0:
-            print(f"\nEpoch {epoch + 1}: {self.monitor} did not improve from {rolling_average:.4f}")
+    for callback in callbacks:
+        callback.on_train_end(None)
 
 
-def train_model(resolution=256, epochs=100, batch_size=64, jit=False):
+def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
     strategy = tf.distribute.MirroredStrategy()
 
     # Create the model
     input_shape = (resolution, resolution, 1)
 
-
     log_dir = "logs/fit/ImageCleanModel/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-
     with strategy.scope():
+
+        generator = create_generator(input_shape)
+        discriminator = create_discriminator(input_shape)
+
+        dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
+        val_dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
+
         callbacks = [
             TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True, write_images=False,
                         update_freq='epoch'),
@@ -191,31 +182,27 @@ def train_model(resolution=256, epochs=100, batch_size=64, jit=False):
             )
         ]
 
-        optimizer = Adafactor(
+        gen_optimizer = Adafactor(
             learning_rate=1.0,
             clipnorm=1.0
         )
 
-        model = create_model(input_shape)
-
-        dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
+        adv_optimizer = Adafactor(
+            learning_rate=1.0,
+            clipnorm=1.0
+        )
 
         if jit:
             jit = True
         else:
             jit = "auto"
 
-        # Compile the model
-        model.compile(optimizer=optimizer, loss="mse",
-                      jit_compile=jit)
-
-        model.summary()
-
         # Train the model
-        model.fit(dataset, epochs=epochs, steps_per_epoch=250, callbacks=callbacks, verbose=1)
+        train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, val_dataset, epochs, batch_size,
+                  resolution, callbacks, jit_compile=jit)
 
     # Save the model
-    model.save('qr_correction_model.keras')
+    generator.save('qr_correction_model.keras')
 
 
 if __name__ == '__main__':

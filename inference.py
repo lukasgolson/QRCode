@@ -26,9 +26,9 @@ def load_latest_model(model_dir):
 
     latest_model_file = max(model_files, key=os.path.getmtime)
     print(f"Loading latest model: {latest_model_file}")
-    model = load_model(latest_model_file, custom_objects={'loss_func': ImageCleanModel.loss_func}, compile=False)
+    model = load_model(latest_model_file, custom_objects={'loss_func': ImageCleanModel.mse_loss}, compile=False)
 
-    model.compile(optimizer='adamw', loss=ImageCleanModel.loss_func, metrics=['accuracy'])
+    model.compile(optimizer='adamw', loss=ImageCleanModel.mse_loss, metrics=['accuracy'])
 
     print("Model loaded successfully.")  # Debug statement
 
