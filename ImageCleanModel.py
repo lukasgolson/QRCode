@@ -85,16 +85,15 @@ def create_discriminator(input_shape):
 @keras.saving.register_keras_serializable()
 def mse_loss(y_true, y_pred):
     return tf.reduce_mean(tf.square(y_true - y_pred))
-def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks, log_interval=10, steps_per_epoch=250, steps_per_val=10):
 
-    _callbacks = []
 
+def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
+              log_interval=10, steps_per_epoch=250, steps_per_val=10):
     callbacks = tf.keras.callbacks.CallbackList(
-    _callbacks, add_history=True, model=generator)
+        callbacks, add_history=True, model=generator)
 
     logs = {}
     callbacks.on_train_begin(logs=logs)
-
 
     for epoch in range(epochs):
         callbacks.on_epoch_begin(epoch, logs=logs)
@@ -112,8 +111,6 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
             callbacks.on_train_batch_begin(step, logs=logs)
 
             transformed_images = generator(dirty_images, training=True)
-
-
 
             # Train Discriminator manually
             with tf.GradientTape() as tape_d:
@@ -135,8 +132,6 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
             grads_d = tape_d.gradient(d_loss, discriminator.trainable_variables)
             disc_optimizer.apply_gradients(zip(grads_d, discriminator.trainable_variables))
 
-
-
             # Train Generator (via GAN model) manually
             with tf.GradientTape() as tape_g:
                 generated_images = generator(dirty_images, training=True)
@@ -152,9 +147,7 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
 
             logs = {'d_loss': d_loss, 'g_loss': g_loss}
 
-
             callbacks.on_train_batch_end(step, logs=logs)
-            callbacks.on_batch_end(step, logs=logs)
 
             if step % log_interval == 0:
                 print(f"Step: {step + 1}/{steps_in_epoch}, D Loss: {d_loss:.4f}, G Loss: {g_loss:.4f}")
@@ -178,24 +171,21 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
     callbacks.on_train_end(logs=logs)
 
 
-
-
 def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
     strategy = tf.distribute.MirroredStrategy()
 
-    #with strategy.scope():
+    # with strategy.scope():
     generator = create_generator((resolution, resolution, 1))
     discriminator = create_discriminator((resolution, resolution, 1))
 
     dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
     val_dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
 
-    tb =         TensorBoard(log_dir="logs/fit/ImageCleanModel/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")),
-
+    tb = TensorBoard(log_dir="logs/fit/ImageCleanModel/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")),
 
     callbacks = [
         tb,
-        RollingAverageModelCheckpoint(filepath='best_model.keras', monitor='loss', save_best_only=True, mode='min')
+        RollingAverageModelCheckpoint(filepath='best_model.keras', monitor='val_mse', save_best_only=True, mode='min')
     ]
 
     gen_optimizer = Adafactor(learning_rate=1.0, clipnorm=1.0)
@@ -203,10 +193,11 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
 
     jit = jit if jit else "auto"
 
-    train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, val_dataset, epochs, callbacks, steps_per_epoch=25, steps_per_val=10)
+    train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, val_dataset, epochs, callbacks,
+              steps_per_epoch=10, steps_per_val=10)
 
     generator.save('qr_correction_model.keras')
-
+    discriminator.save('discriminator_model.keras')
 
 
 if __name__ == '__main__':
