@@ -89,12 +89,16 @@ def mse_loss(y_true, y_pred):
 
 def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
               log_interval=10, steps_per_epoch=250, steps_per_val=10):
-    callbacks = [callback for callback in callbacks if not isinstance(callback, ModelCheckpoint)]
+
+
+    # turn callbacks into a list
+    if not isinstance(callbacks, list):
+        callbacks = [callbacks]
 
     print("Callbacks: ", callbacks)
 
     callback_list = tf.keras.callbacks.CallbackList(
-        callbacks[0], add_history=True, model=generator)
+        callbacks, add_history=True, model=generator)
 
     logs = {}
     callback_list.on_train_begin(logs=logs)
@@ -185,10 +189,9 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
     dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
     val_dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
 
-    tb = TensorBoard(log_dir="logs/fit/ImageCleanModel/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")),
 
     callbacks = [
-        tb,
+        TensorBoard(log_dir="logs/fit/ImageCleanModel/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")),
         RollingAverageModelCheckpoint(filepath='best_model.keras', monitor='val_mse', save_best_only=True, mode='min')
     ]
 
