@@ -88,7 +88,7 @@ def mse_loss(y_true, y_pred):
 
 
 def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
-              log_interval=10, steps_per_epoch=250, steps_per_val=10):
+              log_interval=10, steps_per_epoch=250, steps_per_val=10, lambda_l1=0.1):
     # turn callbacks into a list
     if not isinstance(callbacks, list):
         callbacks = [callbacks]
@@ -146,7 +146,8 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
                 generated_images = generator(dirty_images, training=True)
                 gan_output = discriminator(generated_images, training=True)
                 # Generator loss is based on how well the generated images fool the discriminator
-                g_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(gan_output), gan_output))
+                g_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(gan_output), gan_output)) + lambda_l1 * tf.reduce_mean(tf.abs(clean_images - generated_images))
+
 
             # Get generator gradients and apply them
             grads_g = tape_g.gradient(g_loss, generator.trainable_variables)
