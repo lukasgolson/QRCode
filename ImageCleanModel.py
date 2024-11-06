@@ -96,7 +96,7 @@ def train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, v
     generated_image = generator(gan_input)
     gan_output = discriminator(generated_image)
     gan_model = Model(gan_input, gan_output)
-    gan_model.compile(optimizer=gen_optimizer, loss='binary_crossentropy', jit_compile=jit_compile)
+    gan_model.compile(optimizer=gen_optimizer, loss='binary_crossentropy', metrics=['accuracy'], jit_compile=jit_compile)
 
     for callback in callbacks:
         callback.set_model(gan_model)
