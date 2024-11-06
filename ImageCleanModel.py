@@ -89,14 +89,14 @@ def mse_loss(y_true, y_pred):
 
 def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
               log_interval=10, steps_per_epoch=250, steps_per_val=10):
-    callbacks = tf.keras.callbacks.CallbackList(
+    callback_list = tf.keras.callbacks.CallbackList(
         callbacks, add_history=True, model=generator)
 
     logs = {}
-    callbacks.on_train_begin(logs=logs)
+    callback_list.on_train_begin(logs=logs)
 
     for epoch in range(epochs):
-        callbacks.on_epoch_begin(epoch, logs=logs)
+        callback_list.on_epoch_begin(epoch, logs=logs)
 
         print(f"Epoch {epoch + 1}/{epochs}")
 
@@ -107,8 +107,8 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
         for step, (clean_images, dirty_images) in enumerate(dataset.take(steps_in_epoch)):  # Use .take to limit steps
             # Generate transformed images
 
-            callbacks.on_batch_begin(step, logs=logs)
-            callbacks.on_train_batch_begin(step, logs=logs)
+            callback_list.on_batch_begin(step, logs=logs)
+            callback_list.on_train_batch_begin(step, logs=logs)
 
             transformed_images = generator(dirty_images, training=True)
 
@@ -147,7 +147,7 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
 
             logs = {'d_loss': d_loss, 'g_loss': g_loss}
 
-            callbacks.on_train_batch_end(step, logs=logs)
+            callback_list.on_train_batch_end(step, logs=logs)
 
             if step % log_interval == 0:
                 print(f"Step: {step + 1}/{steps_in_epoch}, D Loss: {d_loss:.4f}, G Loss: {g_loss:.4f}")
@@ -166,9 +166,9 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
 
         # Trigger callbacks
         logs = {'d_loss': d_loss, 'g_loss': g_loss, 'val_mse': val_mse}
-        callbacks.on_epoch_end(epoch, logs=logs)
+        callback_list.on_epoch_end(epoch, logs=logs)
 
-    callbacks.on_train_end(logs=logs)
+    callback_list.on_train_end(logs=logs)
 
 
 def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
