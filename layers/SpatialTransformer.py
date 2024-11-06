@@ -6,21 +6,24 @@ from keras.src.layers import Conv2D, Flatten, Dense, Reshape, LeakyReLU, MaxPool
 
 
 class SpatialTransformer(Layer):
-    def __init__(self, output_intermediaries=True, **tfwargs):
+    def __init__(self, output_intermediaries=True, add_residual=False, **tfwargs):
         super(SpatialTransformer, self).__init__(**tfwargs)
         # Define the localization networtf parameters
 
         self.output_intermediaries = output_intermediaries
 
+        self.residual = add_residual
+
         self.leaky_relu = LeakyReLU(alpha=0.1)
 
-        self.residual_scaling_factor = self.add_weight(
-            name="residual_scaling_factor",
-            shape=(),
-            initializer=tf.constant_initializer(0.5),
-            trainable=True,
-            constraint=tf.keras.constraints.NonNeg()
-        )
+        if self.residual:
+            self.residual_scaling_factor = self.add_weight(
+                name="residual_scaling_factor",
+                shape=(),
+                initializer=tf.constant_initializer(0.1),
+                trainable=True,
+                constraint=tf.keras.constraints.NonNeg()
+            )
 
         self.localization_network = None
         self.trans_param_network = None
@@ -106,34 +109,36 @@ class SpatialTransformer(Layer):
         # Reduce channels by taking the average across the channel dimension
         # x = tf.reduce_mean(x, axis=-1, keepdims=True)  # Shape: (batch_size, height, width)
 
-        x_transformed = self.localization_network(x)
+        x_intermediate = self.localization_network(x)
 
-        theta = self.trans_param_network(x_transformed)
+        theta = self.trans_param_network(x_intermediate)
 
         # Generate a grid of coordinates
         grid = self._generate_grid(theta, self.input_shape[0:3])  # Get height and width from input shape
 
         if self.output_intermediaries:
-            resized = tf.image.resize(x_transformed, (self.input_shape[1], self.input_shape[2]), method='nearest')
-            x_residual = self.concatenate_layer([x, resized])
-        else:
-            x_residual = x  # If no intermediaries, just keep the original input
+            resized = tf.image.resize(x_intermediate, (self.input_shape[1], self.input_shape[2]), method='nearest')
+            x = self.concatenate_layer(
+                [x, resized])  # if output intermediaries, we need to resize the localized output
 
         # Sample the input using the generated grid
         x_transformed = self._sampler(x, grid)
 
-        rescaled_residual = x_residual * self.residual_scaling_factor
+        if self.residual:
+            rescaled_residual = x * self.residual_scaling_factor
+            output = x_transformed + rescaled_residual  # Element-wise addition
+        else:
+            output = x_transformed
 
-        output = x_transformed + rescaled_residual  # Element-wise addition
-
-        output = self.leaky_relu(output)  # Example activation
+        output = self.leaky_relu(output)
 
         return output
 
     def get_config(self):
         base_config = super(SpatialTransformer, self).get_config()
         config = {
-            'output_intermediaries': self.output_intermediaries
+            'output_intermediaries': self.output_intermediaries,
+            'add_residual': self.residual
         }
         return {**base_config, **config}
 
@@ -159,11 +164,7 @@ class SpatialTransformer(Layer):
         # Stack grids to create the full grid
         grid = tf.stack([x_grid, y_grid], axis=-1)  # Shape: (1, height, width, 2)
 
-        # print(f"Initial grid shape: {grid.shape}")  # Should be (1, height, width, 2)
-
         grid = tf.reshape(grid, (1, height * width, 2))  # Shape: (1, height * width, 2)
-
-        # print(f"Reshaped grid shape: {grid.shape}")  # Should be (1, height * width, 2)
 
         batch_size = tf.shape(theta)[0]  # Determine the batch size from theta
 
@@ -171,22 +172,14 @@ class SpatialTransformer(Layer):
 
         theta = tf.reshape(theta, (batch_size, 2, 3))  # Shape: (batch_size, 2, 3)
 
-        # print(f"grid rep: {grid.shape}, theta: {theta.shape}")
-
         affine_matrix = theta[:, :, :2]  # Shape: (batch_size, 2, 2)
         translation = theta[:, :, 2]  # Shape: (batch_size, 2)
 
         transformed_grid = tf.linalg.matmul(grid, affine_matrix)  # Resulting shape: (batch_size, height * width, 2)
 
-        #   print(f"Transformed grid shape: {transformed_grid.shape}")  # Should be (batch_size, height * width, 2)
-
         transformed_grid = transformed_grid + translation[:, None, :]  # Broadcast translation to all grid points
 
-        #  print(f"Transformed grid shape (2): {transformed_grid.shape}")  # Should be (batch_size, height * width, 2)
-
         reshaped = tf.reshape(transformed_grid, (batch_size, height, width, 2))
-
-        #   print(f"Reshaped transformed grid shape: {reshaped.shape}")  # Should be (batch_size, height, width, 2)
 
         return reshaped
 

@@ -15,6 +15,7 @@ from tensorflow.keras.callbacks import TensorBoard
 
 import Dataset
 from RollingAverageCheckpoint import RollingAverageModelCheckpoint
+from layers.FoveatedConvolution import FoveatedConvolutionLayer
 from layers.SoftThresholdLayer import SoftThresholdLayer
 from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
@@ -43,10 +44,18 @@ def create_generator(input_shape):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    # Apply spatial transformer to the input image
-    x = SpatialTransformer()(inputs)
+    x = SpatialAttention(num_layers=4, initial_filters=4, filter_step=4)(inputs)
+
+
+    x = SpatialTransformer(add_residual=False)(x)
+
+
+    x = FoveatedConvolutionLayer()(x) # induces the CNN to focus on the most important parts of the image and center the image
+
+
+
+
     x = SqueezeExcitation()(x)
-    x = SpatialAttention()(x)
     x = BatchNormalization()(x)
 
     x = Conv2DSkip(x, 32, 3, activation='relu', padding='same')
@@ -104,6 +113,9 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
     generator.compile(optimizer=gen_optimizer, loss='binary_crossentropy')
     discriminator.compile(optimizer=disc_optimizer, loss='binary_crossentropy')
 
+    generator.summary()
+    discriminator.summary()
+
     for epoch in range(epochs):
         callback_list.on_epoch_begin(epoch, logs=logs)
 
@@ -146,8 +158,9 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
                 generated_images = generator(dirty_images, training=True)
                 gan_output = discriminator(generated_images, training=True)
                 # Generator loss is based on how well the generated images fool the discriminator
-                g_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(gan_output), gan_output)) + lambda_l1 * tf.reduce_mean(tf.abs(clean_images - generated_images))
-
+                g_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(gan_output),
+                                                                            gan_output)) + lambda_l1 * tf.reduce_mean(
+                    tf.abs(clean_images - generated_images))
 
             # Get generator gradients and apply them
             grads_g = tape_g.gradient(g_loss, generator.trainable_variables)
@@ -192,8 +205,10 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
     generator = create_generator((resolution, resolution, 1))
     discriminator = create_discriminator((resolution, resolution, 1))
 
-    dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size, noisiest_epoch=0)
-    val_dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size, noisiest_epoch=50,
+    dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size,
+                                     noisiest_epoch=0)
+    val_dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size,
+                                         noisiest_epoch=50,
                                          batches_per_epoch=1)
 
     callbacks = [
