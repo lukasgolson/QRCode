@@ -19,7 +19,7 @@ class SpatialTransformer(Layer):
             shape=(),
             initializer=tf.constant_initializer(0.5),
             trainable=True,
-            constraint=lambda x: tf.clip_by_value(x, 0.0, 1.0)  # optional constraint
+            constraint=tf.keras.constraints.NonNeg()
         )
 
         self.localization_network = None
