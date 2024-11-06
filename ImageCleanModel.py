@@ -86,6 +86,7 @@ def create_discriminator(input_shape):
 def mse_loss(y_true, y_pred):
     return tf.reduce_mean(tf.square(y_true - y_pred))
 
+
 def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
               log_interval=10, steps_per_epoch=250, steps_per_val=10):
     # turn callbacks into a list
@@ -164,7 +165,6 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
         val_mse = 0
         val_step = 0  # Initialize the val_step variable
         for val_step, (val_real_images, val_dirty_images) in enumerate(dataset.take(steps_in_val)):
-
             callback_list.on_test_batch_begin(val_step, logs=logs)
 
             val_fake_images = generator(val_dirty_images, training=False)
@@ -191,8 +191,9 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
     generator = create_generator((resolution, resolution, 1))
     discriminator = create_discriminator((resolution, resolution, 1))
 
-    dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
-    val_dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size)
+    dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size, noisiest_epoch=0)
+    val_dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size, noisiest_epoch=50,
+                                         batches_per_epoch=1)
 
     callbacks = [
         TensorBoard(log_dir="logs/fit/ImageCleanModel/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),

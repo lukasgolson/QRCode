@@ -38,9 +38,7 @@ def add_random_image_noise(image, noise_range=(1, 255)):
     noise_factor = random.randint(noise_range[0], noise_range[1] + 1)
     np_image = np.array(image)
 
-
-
-    noise = np.random.randint(-noise_factor, noise_factor +1, np_image.shape)
+    noise = np.random.randint(-noise_factor, noise_factor + 1, np_image.shape)
     noisy_image = np_image + noise
     noisy_image = np.clip(noisy_image, 0, 255)
     return Image.fromarray(noisy_image.astype('uint8'))
@@ -98,30 +96,35 @@ def normalize_image(image, target_size=(512, 512)):
     return np.array(image.convert('L')).reshape((target_size[0], target_size[1], 1)) / 255.0
 
 
-def load_qr_code_data(target_size, encoder=None, paired=False, clean_image_every_n=8, initial_noise=(1, 1, 1),
-                      total_epochs=60, batches_per_epoch=512):
+def load_qr_code_data(target_size, batch_size=32, batches_per_epoch=512, encoder=None, paired=False,
+                      clean_image_every_n=8,
+                      initial_noise=(1, 1, 1),
+                      noisiest_epoch=60):
     """Infinite generator to create QR codes with progressively increasing noise, maxing out by the end of the epochs."""
     image_count = 0
-    images_per_epoch = batches_per_epoch * 32  # Images per epoch
+    images_per_epoch = batches_per_epoch * batch_size  # Images per epoch
 
     while True:
         # Determine the current epoch and batch within the epoch
         current_epoch = image_count // images_per_epoch
         batch_in_epoch = (image_count % images_per_epoch) // 32
 
-        # Calculate maximum noise level for the current epoch
-        epoch_multiplier = min(current_epoch / (total_epochs - 1), 1)  # Linearly scales from 0 to 1 over total epochs
-        max_epoch_shift = initial_noise[0] + epoch_multiplier * 20
-        max_epoch_rotation = initial_noise[1] + epoch_multiplier * 180
-        max_epoch_noise_range = (initial_noise[2], initial_noise[2] + epoch_multiplier * 100)
+        if noisiest_epoch == 0:
+            epoch_multiplier = 1
+        else:
+            # Calculate maximum noise level for the current epoch
+            epoch_multiplier = min(current_epoch / (noisiest_epoch + 1e-8), 1)
+        max_epoch_shift = epoch_multiplier * 20
+        max_epoch_rotation = (epoch_multiplier * 180)
+        max_epoch_noise_range = (epoch_multiplier * 100)
 
         # Calculate noise for the current batch within the epoch
         batch_multiplier = min(batch_in_epoch / (batches_per_epoch - 1), 1)  # Scales from 0 to 1 within each epoch
-        max_shift = int(max_epoch_shift * batch_multiplier) + 1
-        max_rotation = int(max_epoch_rotation * batch_multiplier) + 1
+        max_shift = int(max_epoch_shift * batch_multiplier) + initial_noise[0]
+        max_rotation = int(max_epoch_rotation * batch_multiplier) + initial_noise[1]
         noise_range = (
-            int(max_epoch_noise_range[0] * batch_multiplier),
-            int(max_epoch_noise_range[1] * batch_multiplier) + 1
+            int(0),
+            int(max_epoch_noise_range * batch_multiplier) + initial_noise[2]
         )
 
         content, clean, dirty = generate_qr_code(repeats=1,
@@ -146,16 +149,20 @@ def load_qr_code_data(target_size, encoder=None, paired=False, clean_image_every
         image_count += 1
 
         # Keep noise steady after the final epoch
-        if image_count >= images_per_epoch * total_epochs:
-            image_count = images_per_epoch * (total_epochs - 1)
+        if image_count >= images_per_epoch * noisiest_epoch:
+            image_count = images_per_epoch * (noisiest_epoch - 1)
 
 
-def create_dataset(target_size=(512, 512), batch_size=32, shuffle=True, max_seq_len=512, num_chars=128, paired=False):
+def create_dataset(target_size=(512, 512), batch_size=32, shuffle=True, max_seq_len=512, num_chars=128, paired=False,
+                   noisiest_epoch=0, batches_per_epoch=512):
     encoder = CharLevelEncoder(max_sequence_length=max_seq_len, num_chars=num_chars)  # Initialize encoder
 
     dataset = tf.data.Dataset.from_generator(
-        lambda: load_qr_code_data(target_size, encoder=encoder, paired=paired, clean_image_every_n=8,
-                                  initial_noise=(1, 1, 1), total_epochs=20, batches_per_epoch=512),
+        lambda: load_qr_code_data(target_size, batch_size=batch_size, batches_per_epoch=batches_per_epoch,
+                                  encoder=encoder, paired=paired,
+                                  clean_image_every_n=8,
+                                  initial_noise=(1, 1, 1), noisiest_epoch=noisiest_epoch
+                                  ),
         output_signature=(
             tf.TensorSpec(shape=(target_size[0], target_size[1], 1), dtype=tf.float32),  # X (dirty QR code)
             tf.TensorSpec(shape=(target_size[0], target_size[1], 1), dtype=tf.float32) if paired else
