@@ -14,6 +14,13 @@ class SpatialTransformer(Layer):
 
         self.leaky_relu = LeakyReLU(alpha=0.1)
 
+        self.residual_scaling_factor = self.add_weight(
+            name="residual_scaling_factor",
+            shape=(),
+            initializer=tf.constant_initializer(0.5),
+            trainable=True,
+            constraint=lambda x: tf.clip_by_value(x, 0.0, 1.0)  # optional constraint
+        )
 
         self.localization_network = None
         self.trans_param_network = None
@@ -31,7 +38,7 @@ class SpatialTransformer(Layer):
         x = Conv2D(16, (3, 3), padding='same', activation='relu')(x)
         x = MaxPooling2D()(x)
 
-        x = Conv2D(31, (3, 3), padding='same', activation='relu')(x) # only 31 to allow for the 1 original channel
+        x = Conv2D(31, (3, 3), padding='same', activation='relu')(x)  # only 31 to allow for the 1 original channel
         x = MaxPooling2D()(x)
 
         outputs = x
@@ -82,7 +89,6 @@ class SpatialTransformer(Layer):
             # Build the concatenate layer with the correct input shapes
             self.concatenate_layer.build([input_shape, resized_localized_shape])
 
-
         super(SpatialTransformer, self).build(input_shape)
 
     def compute_output_shape(self, input_shape):
@@ -113,15 +119,14 @@ class SpatialTransformer(Layer):
         else:
             x_residual = x  # If no intermediaries, just keep the original input
 
-
-    # Sample the input using the generated grid
+        # Sample the input using the generated grid
         x_transformed = self._sampler(x, grid)
 
-        output = x_transformed + x_residual  # Element-wise addition
+        rescaled_residual = x_residual * self.residual_scaling_factor
+
+        output = x_transformed + rescaled_residual  # Element-wise addition
 
         output = self.leaky_relu(output)  # Example activation
-
-
 
         return output
 
