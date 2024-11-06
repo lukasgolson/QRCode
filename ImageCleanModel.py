@@ -94,7 +94,7 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
     print("Callbacks: ", callbacks)
 
     callback_list = tf.keras.callbacks.CallbackList(
-        callbacks, add_history=True, model=generator)
+        callbacks[0], add_history=True, model=generator)
 
     logs = {}
     callback_list.on_train_begin(logs=logs)
