@@ -47,7 +47,7 @@ def create_generator(input_shape):
 
     x = SqueezeExcitation(use_residual=False)(x)
 
-    x = FoveatedConvolutionLayer(fovea_size=(64, 64))(x)
+    x = FoveatedConvolutionLayer(fovea_size=(128, 128))(x)
     x = BatchNormalization()(x)
 
     x = Conv2DSkip(x, 16, 3, padding='same')
