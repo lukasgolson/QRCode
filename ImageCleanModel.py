@@ -55,13 +55,8 @@ def create_generator(input_shape):
     x = BatchNormalization()(x)
 
     x = Conv2DSkip(x, 32, 3, activation='relu', padding='same')
-    x = SqueezeExcitation()(x)
-    x = BatchNormalization()(x)
 
     x = Conv2DSkip(x, 16, 3, activation='relu', padding='same')
-
-    x = SqueezeExcitation()(x)
-    x = BatchNormalization()(x)
 
     x = Conv2DSkip(x, 8, 3, activation='relu', padding='same')
 
