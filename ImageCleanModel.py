@@ -2,21 +2,16 @@ import argparse
 import datetime
 
 import keras
+import tensorflow as tf
 from keras import Model
 from keras.src import layers
-
-import tensorflow as tf
-from keras import backend as K
-from keras.src.callbacks import ModelCheckpoint
 from keras.src.layers import BatchNormalization
 from keras.src.optimizers import Adafactor
-from keras.src.trainers.compile_utils import CompileLoss
 from tensorflow.keras.callbacks import TensorBoard
 
 import Dataset
 from RollingAverageCheckpoint import RollingAverageModelCheckpoint
 from layers.FoveatedConvolution import FoveatedConvolutionLayer
-from layers.SoftThresholdLayer import SoftThresholdLayer
 from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
 from layers.SqueezeExcitation import SqueezeExcitation
@@ -63,7 +58,6 @@ def create_generator(input_shape):
     x = Conv2DSkip(x, 16, 3, padding='same')
 
     x = SpatialAttention(num_layers=2, initial_filters=8, filter_step=8)(x)
-
 
     x = Conv2DSkip(x, 8, 3, padding='same')
 
@@ -148,8 +142,10 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
                 d_loss_real = tf.keras.losses.binary_crossentropy(real_labels, real_pred)
                 d_loss_fake = tf.keras.losses.binary_crossentropy(fake_labels, fake_pred)
 
+                identity_loss = sum(discriminator.losses)
+
                 # Combine the losses
-                d_loss = (tf.reduce_mean(d_loss_real) + tf.reduce_mean(d_loss_fake)) / 2
+                d_loss = ((tf.reduce_mean(d_loss_real) + tf.reduce_mean(d_loss_fake)) / 2) + identity_loss
 
             # Get discriminator gradients and apply them
             grads_d = tape_d.gradient(d_loss, discriminator.trainable_variables)
@@ -160,9 +156,11 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
                 generated_images = generator(dirty_images, training=True)
                 gan_output = discriminator(generated_images, training=True)
                 # Generator loss is based on how well the generated images fool the discriminator
+
+                identity_loss = sum(generator.losses)
                 g_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(gan_output),
                                                                             gan_output)) + lambda_l1 * tf.reduce_mean(
-                    tf.abs(clean_images - generated_images))
+                    tf.abs(clean_images - generated_images)) + identity_loss
 
             # Get generator gradients and apply them
             grads_g = tape_g.gradient(g_loss, generator.trainable_variables)
