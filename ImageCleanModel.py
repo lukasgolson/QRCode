@@ -1,5 +1,6 @@
 import argparse
 import datetime
+from os import mkdir
 
 import keras
 import tensorflow as tf
@@ -197,6 +198,9 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
 
     # with strategy.scope():
     generator = create_generator((resolution, resolution, 1))
+
+    # create models directory if it doesn't exist
+    mkdir('models')
 
     generator.save('models/qr_correction_model.keras')
 
