@@ -18,7 +18,7 @@ class SpatialTransformer(Layer):
 
         self.identity_loss_weight = identity_loss_weight
 
-        self.leaky_relu = LeakyReLU(alpha=0.1)
+        self.leaky_relu = LeakyReLU(negative_slope=0.1)
 
         self.trainable_residual = trainable_residual
 

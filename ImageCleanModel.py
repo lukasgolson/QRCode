@@ -24,10 +24,12 @@ from layers.SqueezeExcitation import SqueezeExcitation
 
 def Conv2DSkip(input_layer, filters, kernel_size, activation='relu', padding='same'):
     # Perform convolution on the input layer
-    x = layers.Conv2D(filters, kernel_size, padding=padding)(input_layer)
 
     # Create a skip connection
     skip = input_layer
+
+    x = layers.Conv2D(filters, kernel_size, padding=padding)(input_layer)
+    x = layers.Activation(activation)(x)
 
     # If the number of filters in the skip connection does not match, adjust it
     if input_layer.shape[-1] != filters:
@@ -54,11 +56,14 @@ def create_generator(input_shape):
     x = SqueezeExcitation()(x)
     x = BatchNormalization()(x)
 
-    x = Conv2DSkip(x, 32, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 32, 3, padding='same')
+    x = layers.LeakyReLU()(x)
 
-    x = Conv2DSkip(x, 16, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 16, 3, padding='same')
+    x = layers.LeakyReLU()(x)
 
-    x = Conv2DSkip(x, 8, 3, activation='relu', padding='same')
+    x = Conv2DSkip(x, 8, 3, padding='same')
+    x = layers.LeakyReLU()(x)
 
     x = SqueezeExcitation()(x)
     x = BatchNormalization()(x)
