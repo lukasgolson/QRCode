@@ -7,14 +7,14 @@ from keras.src.layers import Conv2D, Flatten, Dense, Reshape, LeakyReLU, MaxPool
 
 
 class SpatialTransformer(Layer):
-    def __init__(self, output_intermediaries=True, add_residual=False, trainable_residual=False,
+    def __init__(self, output_intermediaries=True, use_residual=False, trainable_residual=False,
                  identity_loss_weight=0.1, **tfwargs):
         super(SpatialTransformer, self).__init__(**tfwargs)
         # Define the localization networtf parameters
 
         self.output_intermediaries = output_intermediaries
 
-        self.residual = add_residual
+        self.residual = use_residual
 
         self.identity_loss_weight = identity_loss_weight
 
@@ -25,7 +25,6 @@ class SpatialTransformer(Layer):
         if self.residual:
             self.residual_scaling_factor = self.add_weight(
                 name="residual_scaling_factor",
-                shape=(),
                 initializer=tf.constant_initializer(0.1),
                 trainable=self.trainable_residual
             )
@@ -46,7 +45,7 @@ class SpatialTransformer(Layer):
         x = Conv2D(16, (3, 3), padding='same', activation='relu')(x)
         x = MaxPooling2D()(x)
 
-        x = Conv2D(31, (3, 3), padding='same', activation='relu')(x)  # only 31 to allow for the 1 original channel
+        x = Conv2D(31, (3, 3), padding='same', activation='relu')(x)  # only 31 to make room for the 1 original channel
         x = MaxPooling2D()(x)
 
         outputs = x
@@ -144,7 +143,7 @@ class SpatialTransformer(Layer):
         base_config = super(SpatialTransformer, self).get_config()
         config = {
             'output_intermediaries': self.output_intermediaries,
-            'add_residual': self.residual,
+            'use_residual': self.residual,
             'identity_loss_weight': self.identity_loss_weight,
             'trainable_residual': self.trainable_residual
         }

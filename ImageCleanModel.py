@@ -23,14 +23,13 @@ def Conv2DSkip(input_layer, filters, kernel_size, padding='same'):
     # Create a skip connection
     skip = input_layer
 
+    if skip.shape[-1] != filters:
+        skip = layers.Conv2D(filters, kernel_size=(1, 1), padding=padding)(skip)
+
     x = layers.Conv2D(filters, kernel_size, padding=padding)(input_layer)
     x = layers.LeakyReLU()(x)
 
     x = SqueezeExcitation()(x)
-
-    # If the number of filters in the skip connection does not match, adjust it
-    if skip.shape[-1] != filters:
-        skip = layers.Conv2D(filters, kernel_size=(1, 1), padding=padding)(skip)
 
     # Add the skip connection to the output of the convolutional layer
     x = layers.Add()([skip, x])
@@ -44,22 +43,17 @@ def create_generator(input_shape):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    x = SpatialTransformer(add_residual=False, trainable_residual=False)(inputs)
+    x = SpatialTransformer(use_residual=False)(inputs)
 
-    # foveated cnn helps to focus on the important parts of the image;
-    # helping spatial transformer to center the image
-    x = FoveatedConvolutionLayer()(x)
-    x = SqueezeExcitation()(x)
+    x = SqueezeExcitation(use_residual=False)(x)
 
+    x = FoveatedConvolutionLayer(fovea_size=(64, 64))(x)
     x = BatchNormalization()(x)
-
-    x = Conv2DSkip(x, 32, 3, padding='same')
 
     x = Conv2DSkip(x, 16, 3, padding='same')
 
-    x = SpatialAttention(num_layers=2, initial_filters=8, filter_step=8)(x)
-
     x = Conv2DSkip(x, 8, 3, padding='same')
+
 
     x = BatchNormalization()(x)
 
@@ -203,6 +197,9 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
 
     # with strategy.scope():
     generator = create_generator((resolution, resolution, 1))
+
+    generator.save('models/qr_correction_model.keras')
+
     discriminator = create_discriminator((resolution, resolution, 1))
 
     dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size,
