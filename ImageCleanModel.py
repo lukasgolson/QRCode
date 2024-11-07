@@ -44,7 +44,7 @@ def create_generator(input_shape):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    x = SpatialTransformer(use_residual=False)(inputs)
+    x = SpatialTransformer(use_residual=False, identity_loss_weight=0.25)(inputs)
 
     x = SqueezeExcitation(use_residual=False)(x)
 

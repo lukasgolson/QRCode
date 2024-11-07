@@ -8,7 +8,8 @@ from keras.src.layers import Conv2D, Flatten, Dense, Reshape, LeakyReLU, MaxPool
 
 class SpatialTransformer(Layer):
     def __init__(self, output_intermediaries=True, use_residual=False, trainable_residual=False,
-                 identity_loss_weight=0.1, **tfwargs):
+                 residual_scaling_factor=0.5,
+                 identity_loss_weight=0.1, frobenius_loss_weight=0.01, determinant_loss_weight=0.1, **tfwargs):
         super(SpatialTransformer, self).__init__(**tfwargs)
         # Define the localization networtf parameters
 
@@ -17,6 +18,8 @@ class SpatialTransformer(Layer):
         self.residual = use_residual
 
         self.identity_loss_weight = identity_loss_weight
+        self.frobebius_loss_weight = frobenius_loss_weight
+        self.determinant_loss_weight = determinant_loss_weight
 
         self.leaky_relu = LeakyReLU(negative_slope=0.1)
 
@@ -25,7 +28,7 @@ class SpatialTransformer(Layer):
         if self.residual:
             self.residual_scaling_factor = self.add_weight(
                 name="residual_scaling_factor",
-                initializer=tf.constant_initializer(0.1),
+                initializer=tf.constant_initializer(residual_scaling_factor),
                 trainable=self.trainable_residual
             )
 
@@ -106,6 +109,23 @@ class SpatialTransformer(Layer):
             return input_shape  # Output shape is the same as input image shape
 
     @tf.function
+    def calculate_theta_loss(self, theta):
+        # Identity loss: penalize deviation from identity
+        identity_matrix = tf.constant([1, 0, 0, 0, 1, 0], dtype=tf.float32)
+
+        identity_diff = theta - identity_matrix
+
+        identity_loss = tf.reduce_mean(tf.log(1 + tf.abs(identity_diff)))
+
+        magnitude_loss = tf.reduce_mean(tf.square(theta))  # Frobenius norm of theta
+
+        determinant = tf.linalg.det(tf.reshape(theta[:, :2], (-1, 2, 2)))  # Determinant of the 2x2 affine matrix
+        determinant_loss = tf.reduce_mean(tf.log(1 + tf.abs(determinant - 1.0)))  # Penalizes larger deviations more
+
+        return (identity_loss * self.identity_loss_weight) + (determinant_loss * self.determinant_loss_weight) + (
+                magnitude_loss * self.frobebius_loss_weight)
+
+    @tf.function
     def call(self, inputs):
         x = inputs  # Input image or feature map
 
@@ -113,10 +133,7 @@ class SpatialTransformer(Layer):
         x_intermediate = self.localization_network(x)
         theta = self.trans_param_network(x_intermediate)
 
-        # Identity loss: penalize deviation from identity
-        identity_matrix = tf.constant([1, 0, 0, 0, 1, 0], dtype=tf.float32)
-        identity_loss = tf.reduce_mean(tf.square(theta - identity_matrix)) * self.identity_loss_weight
-        self.add_loss(identity_loss)
+        self.add_loss(self.calculate_theta_loss(theta))
 
         # Generate the transformation grid and sample the transformed image
         grid = self._generate_grid(theta, self.input_shape[0:3])  # Get height and width from input shape
@@ -145,6 +162,8 @@ class SpatialTransformer(Layer):
             'output_intermediaries': self.output_intermediaries,
             'use_residual': self.residual,
             'identity_loss_weight': self.identity_loss_weight,
+            'frobenius_loss_weight': self.frobebius_loss_weight,
+            'determinant_loss_weight': self.determinant_loss_weight,
             'trainable_residual': self.trainable_residual
         }
         return {**base_config, **config}
