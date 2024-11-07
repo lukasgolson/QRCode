@@ -55,7 +55,6 @@ def create_generator(input_shape):
 
     x = Conv2DSkip(x, 8, 3, padding='same')
 
-
     x = BatchNormalization()(x)
 
     output = layers.Conv2D(1, 1, activation='sigmoid', padding='same')(x)
@@ -72,9 +71,21 @@ def create_discriminator(input_shape):
     x = layers.LeakyReLU()(x)
     x = layers.Conv2D(128, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
+    x = layers.SpatialDropout2D(0.25)(x)
+
     x = layers.Conv2D(256, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
-    x = layers.Flatten()(x)
+    x = layers.SpatialDropout2D(0.25)(x)
+
+    x = layers.Conv2D(512, 3, strides=1, padding='same')(x)
+    x = layers.LeakyReLU()(x)
+
+    gap = layers.GlobalAveragePooling2D()(x)
+    gmp = layers.GlobalMaxPooling2D()(x)
+    x = layers.concatenate([gap, gmp])
+    x = layers.Dense(512, activation='relu')(x)
+    x = layers.Dropout(0.5)(x)
+
     x = layers.Dense(1, activation='sigmoid')(x)  # Output layer for binary classification
 
     model = Model(inputs, x, name='discriminator_model')
@@ -200,9 +211,6 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
     generator = create_generator((resolution, resolution, 1))
 
     # create models directory if it doesn't exist
-    mkdir('models')
-
-    generator.save('models/qr_correction_model.keras')
 
     discriminator = create_discriminator((resolution, resolution, 1))
 

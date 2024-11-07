@@ -115,12 +115,12 @@ class SpatialTransformer(Layer):
 
         identity_diff = theta - identity_matrix
 
-        identity_loss = tf.reduce_mean(tf.log(1 + tf.abs(identity_diff)))
+        identity_loss = tf.reduce_mean(tf.math.log(1 + tf.math.abs(identity_diff)))
 
         magnitude_loss = tf.reduce_mean(tf.square(theta))  # Frobenius norm of theta
 
         determinant = tf.linalg.det(tf.reshape(theta[:, :2], (-1, 2, 2)))  # Determinant of the 2x2 affine matrix
-        determinant_loss = tf.reduce_mean(tf.log(1 + tf.abs(determinant - 1.0)))  # Penalizes larger deviations more
+        determinant_loss = tf.reduce_mean(tf.math.log(1 + tf.math.abs(determinant - 1.0)))  # Penalizes larger deviations more
 
         return (identity_loss * self.identity_loss_weight) + (determinant_loss * self.determinant_loss_weight) + (
                 magnitude_loss * self.frobebius_loss_weight)
