@@ -46,9 +46,9 @@ def create_generator(input_shape):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    x = SpatialAttention(num_layers=4, initial_filters=4, filter_step=4)(inputs)
+    x = SpatialAttention(num_layers=4, initial_filters=8, filter_step=8)(inputs)
 
-    x = SpatialTransformer(add_residual=True, trainable_residual=False)(x)
+    x = SpatialTransformer(add_residual=False, trainable_residual=False)(x)
 
     # foveated cnn helps to focus on the important parts of the image;
     # helping spatial transformer to focus on the right
@@ -62,10 +62,16 @@ def create_generator(input_shape):
     x = Conv2DSkip(x, 16, 3, padding='same')
     x = layers.LeakyReLU()(x)
 
+    x = SqueezeExcitation()(x)
+
+    x = SpatialAttention(num_layers=4, initial_filters=8, filter_step=8)(x)
+
+    x = Conv2DSkip(x, 16, 3, padding='same')
+    x = layers.LeakyReLU()(x)
+
     x = Conv2DSkip(x, 8, 3, padding='same')
     x = layers.LeakyReLU()(x)
 
-    x = SqueezeExcitation()(x)
     x = BatchNormalization()(x)
 
     output = layers.Conv2D(1, 1, activation='sigmoid', padding='same')(x)
