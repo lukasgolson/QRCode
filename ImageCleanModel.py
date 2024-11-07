@@ -46,26 +46,27 @@ def create_generator(input_shape):
 
     x = SpatialAttention(num_layers=4, initial_filters=4, filter_step=4)(inputs)
 
+    x = SpatialTransformer(add_residual=True, trainable_residual=True)(x)
 
-    x = SpatialTransformer(add_residual=False)(x)
-
-
-    x = FoveatedConvolutionLayer()(x) # induces the CNN to focus on the most important parts of the image and center the image
-
-
-
-
+    # foveated cnn helps to focus on the important parts of the image;
+    # helping spatial transformer to focus on the right
+    x = FoveatedConvolutionLayer()(x)
     x = SqueezeExcitation()(x)
     x = BatchNormalization()(x)
 
     x = Conv2DSkip(x, 32, 3, activation='relu', padding='same')
     x = SqueezeExcitation()(x)
+    x = BatchNormalization()(x)
+
     x = Conv2DSkip(x, 16, 3, activation='relu', padding='same')
 
+    x = SqueezeExcitation()(x)
     x = BatchNormalization()(x)
-    # x = SoftThresholdLayer()(x)
 
     x = Conv2DSkip(x, 8, 3, activation='relu', padding='same')
+
+    x = SqueezeExcitation()(x)
+    x = BatchNormalization()(x)
 
     output = layers.Conv2D(1, 1, activation='sigmoid', padding='same')(x)
 

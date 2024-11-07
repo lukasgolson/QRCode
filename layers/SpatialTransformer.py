@@ -1,12 +1,14 @@
 import keras
 import tensorflow as tf
 from keras import Layer, Sequential, Input, Model
+from keras.src.constraints import MinMaxNorm
 from keras.src.layers import Conv2D, Flatten, Dense, Reshape, LeakyReLU, MaxPooling2D, BatchNormalization, Dropout, \
     SpatialDropout2D, Add, Concatenate
 
 
 class SpatialTransformer(Layer):
-    def __init__(self, output_intermediaries=True, add_residual=False, **tfwargs):
+    def __init__(self, output_intermediaries=True, add_residual=False, trainable_residual=False,
+                 identity_loss_weight=0.1, **tfwargs):
         super(SpatialTransformer, self).__init__(**tfwargs)
         # Define the localization networtf parameters
 
@@ -14,15 +16,18 @@ class SpatialTransformer(Layer):
 
         self.residual = add_residual
 
+        self.identity_loss_weight = identity_loss_weight
+
         self.leaky_relu = LeakyReLU(alpha=0.1)
+
+        self.trainable_residual = trainable_residual
 
         if self.residual:
             self.residual_scaling_factor = self.add_weight(
                 name="residual_scaling_factor",
                 shape=(),
                 initializer=tf.constant_initializer(0.1),
-                trainable=True,
-                constraint=tf.keras.constraints.NonNeg()
+                trainable=self.trainable_residual
             )
 
         self.localization_network = None
@@ -103,42 +108,45 @@ class SpatialTransformer(Layer):
 
     @tf.function
     def call(self, inputs):
-        # Unpack the inputs
-        x = inputs  # x is the input image/feature map
+        x = inputs  # Input image or feature map
 
-        # Reduce channels by taking the average across the channel dimension
-        # x = tf.reduce_mean(x, axis=-1, keepdims=True)  # Shape: (batch_size, height, width)
-
+        # Apply the localization and transformation
         x_intermediate = self.localization_network(x)
-
         theta = self.trans_param_network(x_intermediate)
 
-        # Generate a grid of coordinates
+        # Identity loss: penalize deviation from identity
+        identity_matrix = tf.constant([1, 0, 0, 0, 1, 0], dtype=tf.float32)
+        identity_loss = tf.reduce_mean(tf.square(theta - identity_matrix)) * self.identity_loss_weight
+        self.add_loss(identity_loss)
+
+        # Generate the transformation grid and sample the transformed image
         grid = self._generate_grid(theta, self.input_shape[0:3])  # Get height and width from input shape
 
-        if self.output_intermediaries:
-            resized = tf.image.resize(x_intermediate, (self.input_shape[1], self.input_shape[2]), method='nearest')
-            x = self.concatenate_layer(
-                [x, resized])  # if output intermediaries, we need to resize the localized output
+        if x.shape[1:3] != x_intermediate.shape[1:3]:
+            x_intermediate = tf.image.resize(x_intermediate, x.shape[1:3], method='nearest')
 
-        # Sample the input using the generated grid
+        x = self.concatenate_layer([x, x_intermediate])
+
         x_transformed = self._sampler(x, grid)
 
+        # Conditionally apply residuals
         if self.residual:
             rescaled_residual = x * self.residual_scaling_factor
-            output = x_transformed + rescaled_residual  # Element-wise addition
+            output = x_transformed + rescaled_residual  # Element-wise addition of residual
         else:
             output = x_transformed
 
+        # Apply activation
         output = self.leaky_relu(output)
-
         return output
 
     def get_config(self):
         base_config = super(SpatialTransformer, self).get_config()
         config = {
             'output_intermediaries': self.output_intermediaries,
-            'add_residual': self.residual
+            'add_residual': self.residual,
+            'identity_loss_weight': self.identity_loss_weight,
+            'trainable_residual': self.trainable_residual
         }
         return {**base_config, **config}
 
