@@ -46,7 +46,7 @@ def create_generator(input_shape):
 
     x = SpatialAttention(num_layers=4, initial_filters=4, filter_step=4)(inputs)
 
-    x = SpatialTransformer(add_residual=True, trainable_residual=True)(x)
+    x = SpatialTransformer(add_residual=True, trainable_residual=False)(x)
 
     # foveated cnn helps to focus on the important parts of the image;
     # helping spatial transformer to focus on the right
