@@ -22,55 +22,50 @@ from layers.SpatialTransformer import SpatialTransformer
 from layers.SqueezeExcitation import SqueezeExcitation
 
 
-def Conv2DSkip(input_layer, filters, kernel_size, activation='relu', padding='same'):
+def Conv2DSkip(input_layer, filters, kernel_size, padding='same'):
     # Perform convolution on the input layer
 
     # Create a skip connection
     skip = input_layer
 
     x = layers.Conv2D(filters, kernel_size, padding=padding)(input_layer)
-    x = layers.Activation(activation)(x)
+    x = layers.LeakyReLU()(x)
+
+    x = SqueezeExcitation()(x)
 
     # If the number of filters in the skip connection does not match, adjust it
-    if input_layer.shape[-1] != filters:
-        skip = layers.Conv2D(filters, kernel_size=(1, 1), padding=padding)(input_layer)
+    if skip.shape[-1] != filters:
+        skip = layers.Conv2D(filters, kernel_size=(1, 1), padding=padding)(skip)
 
     # Add the skip connection to the output of the convolutional layer
     x = layers.Add()([skip, x])
+    x = layers.LeakyReLU()(x)
 
     # Apply the activation function after the addition
-    return layers.Activation(activation)(x)
+    return x
 
 
 def create_generator(input_shape):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    x = SpatialAttention(num_layers=4, initial_filters=8, filter_step=8)(inputs)
-
-    x = SpatialTransformer(add_residual=False, trainable_residual=False)(x)
+    x = SpatialTransformer(add_residual=False, trainable_residual=False)(inputs)
 
     # foveated cnn helps to focus on the important parts of the image;
-    # helping spatial transformer to focus on the right
+    # helping spatial transformer to center the image
     x = FoveatedConvolutionLayer()(x)
     x = SqueezeExcitation()(x)
+
     x = BatchNormalization()(x)
 
     x = Conv2DSkip(x, 32, 3, padding='same')
-    x = layers.LeakyReLU()(x)
 
     x = Conv2DSkip(x, 16, 3, padding='same')
-    x = layers.LeakyReLU()(x)
 
-    x = SqueezeExcitation()(x)
+    x = SpatialAttention(num_layers=2, initial_filters=8, filter_step=8)(x)
 
-    x = SpatialAttention(num_layers=4, initial_filters=8, filter_step=8)(x)
-
-    x = Conv2DSkip(x, 16, 3, padding='same')
-    x = layers.LeakyReLU()(x)
 
     x = Conv2DSkip(x, 8, 3, padding='same')
-    x = layers.LeakyReLU()(x)
 
     x = BatchNormalization()(x)
 
