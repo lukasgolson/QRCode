@@ -12,6 +12,8 @@ from tensorflow.keras.callbacks import TensorBoard
 
 import Dataset
 from RollingAverageCheckpoint import RollingAverageModelCheckpoint
+from layers.CoordConv import CoordConv
+from layers.DeformableConv2D import DeformableConv2D
 from layers.FoveatedConvolution import FoveatedConvolutionLayer
 from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
@@ -44,16 +46,18 @@ def create_generator(input_shape):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    x = SpatialTransformer(use_residual=False, identity_loss_weight=0.25)(inputs)
+    x = DeformableConv2D(8, 3)(inputs)
+
+    x = Conv2DSkip(x, 32, 3, padding='same')
+
+    x = CoordConv(64, 3)(x)
 
     x = SqueezeExcitation(use_residual=False)(x)
 
     x = FoveatedConvolutionLayer(fovea_size=(128, 128))(x)
     x = BatchNormalization()(x)
 
-    x = Conv2DSkip(x, 16, 3, padding='same')
-
-    x = Conv2DSkip(x, 8, 3, padding='same')
+    x = Conv2DSkip(x, 128, 3, padding='same')
 
     x = BatchNormalization()(x)
 
@@ -67,18 +71,21 @@ def create_generator(input_shape):
 
 def create_discriminator(input_shape):
     inputs = layers.Input(shape=input_shape)
-    x = layers.Conv2D(64, 3, strides=2, padding='same')(inputs)
+
+    x = DeformableConv2D(8, 3)(inputs)
+
+    x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
+
+    # x = CoordConv(64, 3)(x)
     x = layers.Conv2D(128, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
-    x = layers.SpatialDropout2D(0.25)(x)
+    x = layers.SpatialDropout2D(0.1)(x)
 
-    x = layers.Conv2D(256, 3, strides=2, padding='same')(x)
+    x = CoordConv(256, 3)(x)
+
     x = layers.LeakyReLU()(x)
     x = layers.SpatialDropout2D(0.25)(x)
-
-    x = layers.Conv2D(512, 3, strides=1, padding='same')(x)
-    x = layers.LeakyReLU()(x)
 
     gap = layers.GlobalAveragePooling2D()(x)
     gmp = layers.GlobalMaxPooling2D()(x)
@@ -232,7 +239,7 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
     jit = jit if jit else "auto"
 
     train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, val_dataset, epochs, callbacks,
-              steps_per_epoch=250, steps_per_val=10)
+              steps_per_epoch=250, steps_per_val=10, lambda_l1=0.1)
 
     generator.save('qr_correction_model.keras')
     discriminator.save('discriminator_model.keras')
