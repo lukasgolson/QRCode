@@ -52,8 +52,7 @@ def create_generator(input_shape):
     x = DeformableConv2D(16, 3)(x)
     x = layers.LeakyReLU()(x)
 
-    x = DeformableConv2D(32, 3)(x)
-    x = layers.LeakyReLU()(x)
+
 
 
     x = Conv2DSkip(x, 32, 3, padding='same')
