@@ -49,29 +49,18 @@ def create_generator(input_shape):
     x = DeformableConv2D(8, 3)(inputs)
     x = layers.LeakyReLU()(x)
 
-    x = DeformableConv2D(16, 3)(x)
-    x = layers.LeakyReLU()(x)
+    x = BatchNormalization()(x)
 
-
-
+    x = CoordConv(16, 3)(x)
 
     x = Conv2DSkip(x, 32, 3, padding='same')
 
-    x = FoveatedConvolutionLayer(fovea_size=(128, 128))(x)
+    x = FoveatedConvolutionLayer(fovea_size=(64, 64))(x)
     x = layers.LeakyReLU()(x)
-
-    x = BatchNormalization()(x)
-
-    x = CoordConv(64, 3)(x)
-
-
-    x = Conv2DSkip(x, 128, 3, padding='same')
 
     x = SqueezeExcitation(use_residual=False)(x)
 
     x = Conv2DSkip(x, 32, 3, padding='same')
-
-
 
     x = BatchNormalization()(x)
 
@@ -88,23 +77,23 @@ def create_discriminator(input_shape):
 
     x = DeformableConv2D(8, 3)(inputs)
 
-    x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
+    x = layers.Conv2D(16, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
 
-    x = CoordConv(64, 3)(x)
+    x = CoordConv(32, 3)(x)
     x = layers.SpatialDropout2D(0.1)(x)
 
     x = layers.LeakyReLU()(x)
 
-    x = layers.Conv2D(128, 3, strides=2, padding='same')(x)
+    x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
     x = layers.SpatialDropout2D(0.1)(x)
 
     gap = layers.GlobalAveragePooling2D()(x)
     gmp = layers.GlobalMaxPooling2D()(x)
     x = layers.concatenate([gap, gmp])
-    x = layers.Dense(512, activation='relu')(x)
-    x = layers.Dropout(0.5)(x)
+    x = layers.Dense(256, activation='relu')(x)
+    x = layers.Dropout(0.25)(x)
 
     x = layers.Dense(1, activation='sigmoid')(x)  # Output layer for binary classification
 
