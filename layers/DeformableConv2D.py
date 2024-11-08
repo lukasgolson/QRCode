@@ -7,152 +7,173 @@ class DeformableConv2D(Layer):
         super(DeformableConv2D, self).__init__(**kwargs)
         self.filters = filters
         self.kernel_size = kernel_size
-        self.offset_channels = (
-                2 * kernel_size * kernel_size
-        )  # Offset channels for x and y directions
+        self.offset_channels = 2 * kernel_size * kernel_size  # For x and y offsets
         self.conv_offset = Conv2D(
             self.offset_channels,
             kernel_size=kernel_size,
             padding="same",
             kernel_initializer=Zeros(),
         )
-        self.conv = Conv2D(filters, kernel_size=1, padding="same")
+        self.conv = Conv2D(filters, kernel_size=kernel_size, padding="same")
 
     def build(self, input_shape):
-        input_shape = tuple(input_shape)  # Ensure input_shape is a tuple
-        self.conv_offset.build(input_shape)
-        num_offsets = self.kernel_size * self.kernel_size
-        channels = input_shape[-1] * num_offsets
-        conv_input_shape = input_shape[:-1] + (channels,)  # Corrected line
-        self.conv.build(conv_input_shape)
-        self.built = True
+        # Input shape should be [batch_size, height, width, channels]
+        batch_size, height, width, channels = input_shape
+
+        # Build the conv_offset layer (predict offsets)
+        self.conv_offset.build(input_shape)  # Initialize offset prediction convolution
+
+        # The output shape of conv_offset will have the shape [batch_size, height, width, offset_channels]
+        offset_shape = (input_shape[0], height, width, self.offset_channels)
+
+        sampled_input_shape = (batch_size, height, width, self.kernel_size * self.kernel_size * channels)
+        self.conv.build(sampled_input_shape)  # Initialize the main convolution
 
 
+    # Call the parent class build method to register weights
+        super(DeformableConv2D, self).build(input_shape)
 
     def call(self, inputs):
         # Generate offsets
-        offsets = self.conv_offset(inputs)  # Shape: [batch_size, height, width, 2 * num_offsets]
+        offsets = self.conv_offset(inputs)  # Shape: [batch_size, height, width, offset_channels]
 
-        # Get input shape and kernel dimensions
-        batch_size = tf.shape(inputs)[0]
-        height = tf.shape(inputs)[1]
-        width = tf.shape(inputs)[2]
-        channels = inputs.shape[-1]  # Assuming channels is known statically
+        # Get input shape
+        input_shape = tf.shape(inputs)
+        batch_size, height, width, channels = (
+            input_shape[0],
+            input_shape[1],
+            input_shape[2],
+            inputs.shape[-1],
+        )
 
-        num_offsets = self.kernel_size * self.kernel_size
+        # Prepare the mesh grid
+        grid_y, grid_x = tf.meshgrid(
+            tf.range(height, dtype=tf.float32), tf.range(width, dtype=tf.float32), indexing="ij"
+        )
 
-        # Prepare the sampling grid
-        y, x = tf.meshgrid(
-            tf.range(height, dtype=tf.float32),
-            tf.range(width, dtype=tf.float32),
-            indexing='ij'
-        )  # y and x are [height, width]
+        # Stack and expand dimensions to create a grid
+        grid = tf.stack((grid_x, grid_y), axis=-1)  # Shape: [height, width, 2]
+        grid = tf.expand_dims(grid, axis=0)  # Shape: [1, height, width, 2]
 
-        x = tf.expand_dims(x, axis=0)  # Shape: [1, height, width]
-        y = tf.expand_dims(y, axis=0)  # Shape: [1, height, width]
+        # Apply offsets
+        offsets = tf.reshape(
+            offsets, [batch_size, height, width, self.kernel_size * self.kernel_size, 2]
+        )
 
-        # Expand to match batch size
-        x = tf.tile(x, [batch_size, 1, 1])  # [batch_size, height, width]
-        y = tf.tile(y, [batch_size, 1, 1])  # [batch_size, height, width]
+        # Generate kernel grid offsets
+        kernel_grid = self._get_kernel_grid()  # Shape: [kernel_size * kernel_size, 2]
+        kernel_grid = tf.reshape(kernel_grid, [1, 1, 1, self.kernel_size * self.kernel_size, 2])
 
-        # Reshape offsets
-        offsets = tf.reshape(offsets, [batch_size, height, width, num_offsets, 2])
+        # Compute the sampling locations
+        sampling_locations = grid[:, :, :, None, :] + kernel_grid + offsets  # Broadcasting
 
-        # Compute sampling locations
-        x_offsets = offsets[..., 0]  # [batch_size, height, width, num_offsets]
-        y_offsets = offsets[..., 1]  # [batch_size, height, width, num_offsets]
+        # Normalize coordinates to [0, height/width]
+        sampling_locations = tf.stack(
+            [
+                tf.clip_by_value(sampling_locations[..., 0], 0, tf.cast(width - 1, tf.float32)),
+                tf.clip_by_value(sampling_locations[..., 1], 0, tf.cast(height - 1, tf.float32)),
+            ],
+            axis=-1,
+        )
 
-        x = tf.expand_dims(x, axis=-1)  # [batch_size, height, width, 1]
-        y = tf.expand_dims(y, axis=-1)  # [batch_size, height, width, 1]
+        # Reshape for interpolation
+        sampling_locations = tf.reshape(
+            sampling_locations, [batch_size, height * width * self.kernel_size * self.kernel_size, 2]
+        )
 
-        new_x = x + x_offsets  # [batch_size, height, width, num_offsets]
-        new_y = y + y_offsets  # [batch_size, height, width, num_offsets]
+        # Perform bilinear interpolation
+        sampled_values = self._bilinear_interpolate(inputs, sampling_locations)
 
-        # Clip values to stay within image boundaries
-        new_x = tf.clip_by_value(new_x, 0.0, tf.cast(width - 1, tf.float32))
-        new_y = tf.clip_by_value(new_y, 0.0, tf.cast(height - 1, tf.float32))
+        # Reshape sampled values to [batch_size, height, width, kernel_size * kernel_size * channels]
+        sampled_values = tf.reshape(
+            sampled_values,
+            [batch_size, height, width, self.kernel_size * self.kernel_size * channels],
+        )
 
-        # Perform bilinear interpolation efficiently
-        interpolated = self.bilinear_interpolate(inputs, new_x, new_y)
 
-        # Reshape sampled points
-        batch_size = tf.shape(interpolated)[0]
-        height = tf.shape(interpolated)[1]
-        width = tf.shape(interpolated)[2]
-        num_offsets = tf.shape(interpolated)[3]
-        channels = tf.shape(interpolated)[4]
 
-        sampled_points = tf.reshape(interpolated, [batch_size, height, width, num_offsets * channels])
 
-        # Apply 1x1 convolution
-        outputs = self.conv(sampled_points)
+        # Apply convolution
+        outputs = self.conv(sampled_values)
         return outputs
 
-    def bilinear_interpolate(self, inputs, x, y):
-        batch_size, height, width, channels = tf.shape(inputs)[0], tf.shape(inputs)[1], tf.shape(inputs)[2], tf.shape(inputs)[3]
-        num_offsets = tf.shape(x)[-1]
+    def _get_kernel_grid(self):
+        # Generate relative coordinates for the kernel grid
+        offset = (self.kernel_size - 1) / 2.0
+        x = tf.linspace(-offset, offset, self.kernel_size)
+        y = tf.linspace(-offset, offset, self.kernel_size)
+        x_grid, y_grid = tf.meshgrid(x, y)
+        kernel_grid = tf.stack([x_grid, y_grid], axis=-1)
+        kernel_grid = tf.reshape(kernel_grid, [-1, 2])  # Shape: [kernel_size * kernel_size, 2]
+        return kernel_grid
 
-        # Four neighboring pixel indices
+    def _bilinear_interpolate(self, inputs, sampling_locations):
+        # Get shapes
+        batch_size, height, width, channels = tf.shape(inputs)[0], tf.shape(inputs)[1], tf.shape(inputs)[2], inputs.shape[3]
+        num_sampling_points = tf.shape(sampling_locations)[1]
+
+        # Split sampling locations
+        x = sampling_locations[..., 0]
+        y = sampling_locations[..., 1]
+
+        # Get integer and fractional parts
         x0 = tf.floor(x)
         x1 = x0 + 1
         y0 = tf.floor(y)
         y1 = y0 + 1
 
-        # Clip indices
-        x0 = tf.clip_by_value(x0, 0.0, tf.cast(width - 1, tf.float32))
-        x1 = tf.clip_by_value(x1, 0.0, tf.cast(width - 1, tf.float32))
-        y0 = tf.clip_by_value(y0, 0.0, tf.cast(height - 1, tf.float32))
-        y1 = tf.clip_by_value(y1, 0.0, tf.cast(height - 1, tf.float32))
+        # Clip values
+        x0 = tf.clip_by_value(x0, 0, tf.cast(width - 1, tf.float32))
+        x1 = tf.clip_by_value(x1, 0, tf.cast(width - 1, tf.float32))
+        y0 = tf.clip_by_value(y0, 0, tf.cast(height - 1, tf.float32))
+        y1 = tf.clip_by_value(y1, 0, tf.cast(height - 1, tf.float32))
 
-        # Interpolation weights
+        # Compute interpolation weights
         wa = (x1 - x) * (y1 - y)
         wb = (x1 - x) * (y - y0)
         wc = (x - x0) * (y1 - y)
         wd = (x - x0) * (y - y0)
 
-        # Gather pixel values
-        Ia = self.gather_values(inputs, x0, y0)
-        Ib = self.gather_values(inputs, x0, y1)
-        Ic = self.gather_values(inputs, x1, y0)
-        Id = self.gather_values(inputs, x1, y1)
+        # Expand dimensions for gathering
+        x0 = tf.cast(x0, tf.int32)
+        x1 = tf.cast(x1, tf.int32)
+        y0 = tf.cast(y0, tf.int32)
+        y1 = tf.cast(y1, tf.int32)
 
-        # Expand weights
+        # Flatten inputs
+        inputs_flat = tf.reshape(inputs, [batch_size * height * width, channels])
+
+        # Compute base indices
+        base = tf.range(batch_size) * height * width
+        base = tf.reshape(base, [batch_size, 1])
+        base = tf.tile(base, [1, num_sampling_points])
+
+        # Compute indices for each corner
+        idx_a = base + y0 * width + x0
+        idx_b = base + y1 * width + x0
+        idx_c = base + y0 * width + x1
+        idx_d = base + y1 * width + x1
+
+        # Gather pixel values
+        Ia = tf.gather(inputs_flat, tf.reshape(idx_a, [-1]))
+        Ib = tf.gather(inputs_flat, tf.reshape(idx_b, [-1]))
+        Ic = tf.gather(inputs_flat, tf.reshape(idx_c, [-1]))
+        Id = tf.gather(inputs_flat, tf.reshape(idx_d, [-1]))
+
+        # Reshape back to [batch_size, num_sampling_points, channels]
+        Ia = tf.reshape(Ia, [batch_size, num_sampling_points, channels])
+        Ib = tf.reshape(Ib, [batch_size, num_sampling_points, channels])
+        Ic = tf.reshape(Ic, [batch_size, num_sampling_points, channels])
+        Id = tf.reshape(Id, [batch_size, num_sampling_points, channels])
+
+        # Compute interpolated values
         wa = tf.expand_dims(wa, axis=-1)
         wb = tf.expand_dims(wb, axis=-1)
         wc = tf.expand_dims(wc, axis=-1)
         wd = tf.expand_dims(wd, axis=-1)
 
-        # Compute interpolated values
-        interpolated = wa * Ia + wb * Ib + wc * Ic + wd * Id  # Shape: [batch_size, height, width, num_offsets, channels]
+        interpolated = wa * Ia + wb * Ib + wc * Ic + wd * Id  # Shape: [batch_size, num_sampling_points, channels]
         return interpolated
-
-    def gather_values(self, inputs, x_indices, y_indices):
-        batch_size = tf.shape(inputs)[0]
-        height = tf.shape(inputs)[1]
-        width = tf.shape(inputs)[2]
-        channels = tf.shape(inputs)[3]
-        num_offsets = tf.shape(x_indices)[-1]
-
-        x_indices = tf.cast(x_indices, tf.int32)
-        y_indices = tf.cast(y_indices, tf.int32)
-
-        # Compute linear indices
-        batch_indices = tf.reshape(tf.range(batch_size), [batch_size, 1, 1, 1])
-        batch_indices = tf.tile(batch_indices, [1, height, width, num_offsets])
-
-        # Flatten indices
-        flat_indices = batch_indices * (height * width) + y_indices * width + x_indices  # Shape: [batch_size, height, width, num_offsets]
-        flat_indices = tf.reshape(flat_indices, [-1])  # Flattened
-
-        # Flatten inputs
-        inputs_flat = tf.reshape(inputs, [-1, channels])  # Shape: [batch_size * height * width, channels]
-
-        # Gather values
-        gathered = tf.gather(inputs_flat, flat_indices)  # Shape: [batch_size * height * width * num_offsets, channels]
-
-        # Reshape back
-        gathered = tf.reshape(gathered, [batch_size, height, width, num_offsets, channels])
-        return gathered
 
     def compute_output_shape(self, input_shape):
         return input_shape[:3] + (self.filters,)

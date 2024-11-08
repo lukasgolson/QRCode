@@ -92,6 +92,7 @@ def create_discriminator(input_shape):
     gap = layers.GlobalAveragePooling2D()(x)
     gmp = layers.GlobalMaxPooling2D()(x)
     x = layers.concatenate([gap, gmp])
+
     x = layers.Dense(256, activation='relu')(x)
     x = layers.Dropout(0.25)(x)
 

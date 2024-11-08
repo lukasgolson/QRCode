@@ -1,10 +1,24 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Layer, Conv2D
 
+
 class CoordConv(Layer):
     def __init__(self, filters, kernel_size, **kwargs):
         super(CoordConv, self).__init__(**kwargs)
+
+        self.filters = filters
+        self.kernel_size = kernel_size
+
         self.conv = Conv2D(filters, kernel_size=kernel_size, padding='same')
+
+    def build(self, input_shape):
+        input_channels = input_shape[-1]
+
+        coord_input_channels = input_channels + 2
+
+        self.conv.build([None, input_shape[1], input_shape[2], coord_input_channels])
+
+        super(CoordConv, self).build(input_shape)
 
     def call(self, inputs):
         # Get dynamic input shape
@@ -33,3 +47,8 @@ class CoordConv(Layer):
 
         # Apply convolution
         return self.conv(concat_inputs)
+
+    def get_config(self):
+        config = super(CoordConv, self).get_config()
+        config.update({"filters": self.filters, "kernel_size": self.kernel_size})
+        return config
