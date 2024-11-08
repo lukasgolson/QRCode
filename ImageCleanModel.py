@@ -47,17 +47,32 @@ def create_generator(input_shape):
     inputs = layers.Input(shape=input_shape)
 
     x = DeformableConv2D(8, 3)(inputs)
+    x = layers.LeakyReLU()(x)
+
+    x = DeformableConv2D(16, 3)(x)
+    x = layers.LeakyReLU()(x)
+
+    x = DeformableConv2D(32, 3)(x)
+    x = layers.LeakyReLU()(x)
+
 
     x = Conv2DSkip(x, 32, 3, padding='same')
 
+    x = FoveatedConvolutionLayer(fovea_size=(128, 128))(x)
+    x = layers.LeakyReLU()(x)
+
+    x = BatchNormalization()(x)
+
     x = CoordConv(64, 3)(x)
+
+
+    x = Conv2DSkip(x, 128, 3, padding='same')
 
     x = SqueezeExcitation(use_residual=False)(x)
 
-    x = FoveatedConvolutionLayer(fovea_size=(128, 128))(x)
-    x = BatchNormalization()(x)
+    x = Conv2DSkip(x, 32, 3, padding='same')
 
-    x = Conv2DSkip(x, 128, 3, padding='same')
+
 
     x = BatchNormalization()(x)
 
@@ -77,15 +92,14 @@ def create_discriminator(input_shape):
     x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
 
-    # x = CoordConv(64, 3)(x)
+    x = CoordConv(64, 3)(x)
+    x = layers.SpatialDropout2D(0.1)(x)
+
+    x = layers.LeakyReLU()(x)
+
     x = layers.Conv2D(128, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
     x = layers.SpatialDropout2D(0.1)(x)
-
-    x = CoordConv(256, 3)(x)
-
-    x = layers.LeakyReLU()(x)
-    x = layers.SpatialDropout2D(0.25)(x)
 
     gap = layers.GlobalAveragePooling2D()(x)
     gmp = layers.GlobalMaxPooling2D()(x)
@@ -216,6 +230,8 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
 
     # with strategy.scope():
     generator = create_generator((resolution, resolution, 1))
+
+    generator.save("models/qr_correction_model.keras")
 
     # create models directory if it doesn't exist
 
