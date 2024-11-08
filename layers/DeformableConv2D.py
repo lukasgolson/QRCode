@@ -19,12 +19,14 @@ class DeformableConv2D(Layer):
         self.conv = Conv2D(filters, kernel_size=1, padding="same")
 
     def build(self, input_shape):
+        input_shape = tuple(input_shape)  # Ensure input_shape is a tuple
         self.conv_offset.build(input_shape)
         num_offsets = self.kernel_size * self.kernel_size
         channels = input_shape[-1] * num_offsets
-        conv_input_shape = input_shape[:-1] + [channels]  # Corrected line
+        conv_input_shape = input_shape[:-1] + (channels,)  # Corrected line
         self.conv.build(conv_input_shape)
         self.built = True
+
 
 
     def call(self, inputs):
