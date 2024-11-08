@@ -6,7 +6,7 @@ import keras
 import tensorflow as tf
 from keras import Model
 from keras.src import layers
-from keras.src.layers import BatchNormalization
+from keras.src.layers import BatchNormalization, LayerNormalization
 from keras.src.optimizers import Adafactor
 from tensorflow.keras.callbacks import TensorBoard
 
@@ -20,7 +20,7 @@ from layers.SpatialTransformer import SpatialTransformer
 from layers.SqueezeExcitation import SqueezeExcitation
 
 
-def Conv2DSkip(input_layer, filters, kernel_size, padding='same'):
+def Conv2DSkip(input_layer, filters, kernel_size, padding='same', coordConv=False):
     # Perform convolution on the input layer
 
     # Create a skip connection
@@ -29,7 +29,11 @@ def Conv2DSkip(input_layer, filters, kernel_size, padding='same'):
     if skip.shape[-1] != filters:
         skip = layers.Conv2D(filters, kernel_size=(1, 1), padding=padding)(skip)
 
-    x = layers.Conv2D(filters, kernel_size, padding=padding)(input_layer)
+    if coordConv:
+        x = CoordConv(filters, kernel_size)(input_layer)
+    else:
+        x = layers.Conv2D(filters, kernel_size, padding=padding)(input_layer)
+
     x = layers.LeakyReLU()(x)
 
     x = SqueezeExcitation()(x)
@@ -46,13 +50,28 @@ def create_generator(input_shape):
     # Define the input layer
     inputs = layers.Input(shape=input_shape)
 
-    x = DeformableConv2D(8, 3)(inputs)
+    x = inputs
+    x = Conv2DSkip(x, 16, 3, padding='same')
+    x = layers.MaxPooling2D(pool_size=(2, 2))(x)  # Downsample by a factor of 2
+
+    x = Conv2DSkip(x, 32, 3, padding='same')
+    x = layers.MaxPooling2D(pool_size=(2, 2))(x)  # Downsample by a factor of 2
+
+    x = Conv2DSkip(x, 64, 3, padding='same', coordConv=True)
+
+    x = LayerNormalization()(x)
     x = layers.LeakyReLU()(x)
 
-    x = BatchNormalization()(x)
 
-    x = CoordConv(16, 3)(x)
+    x = DeformableConv2D(64, 3)(x)
 
+    x = LayerNormalization()(x)
+    x = layers.LeakyReLU()(x)
+
+    x = layers.UpSampling2D(size=(2, 2))(x)  # Upsample by a factor of 2
+    x = Conv2DSkip(x, 64, 3, padding='same')
+
+    x = layers.UpSampling2D(size=(2, 2))(x)
     x = Conv2DSkip(x, 32, 3, padding='same')
 
     x = FoveatedConvolutionLayer(fovea_size=(64, 64))(x)
@@ -60,9 +79,9 @@ def create_generator(input_shape):
 
     x = SqueezeExcitation(use_residual=False)(x)
 
-    x = Conv2DSkip(x, 32, 3, padding='same')
+    x = Conv2DSkip(x, 16, 3, padding='same')
 
-    x = BatchNormalization()(x)
+    x = LayerNormalization()(x)
 
     output = layers.Conv2D(1, 1, activation='sigmoid', padding='same')(x)
 
@@ -75,9 +94,10 @@ def create_generator(input_shape):
 def create_discriminator(input_shape):
     inputs = layers.Input(shape=input_shape)
 
-    x = DeformableConv2D(8, 3)(inputs)
 
-    x = layers.Conv2D(16, 3, strides=2, padding='same')(x)
+
+
+    x = layers.Conv2D(16, 3, strides=2, padding='same')(inputs)
     x = layers.LeakyReLU()(x)
 
     x = CoordConv(32, 3)(x)
@@ -86,14 +106,20 @@ def create_discriminator(input_shape):
     x = layers.LeakyReLU()(x)
 
     x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
+
+
     x = layers.LeakyReLU()(x)
     x = layers.SpatialDropout2D(0.1)(x)
+
+    x = DeformableConv2D(64, 3)(x)
+
 
     gap = layers.GlobalAveragePooling2D()(x)
     gmp = layers.GlobalMaxPooling2D()(x)
     x = layers.concatenate([gap, gmp])
 
-    x = layers.Dense(256, activation='relu')(x)
+    x = layers.Dense(256)(x)
+    x = layers.LeakyReLU()(x)
     x = layers.Dropout(0.25)(x)
 
     x = layers.Dense(1, activation='sigmoid')(x)  # Output layer for binary classification
