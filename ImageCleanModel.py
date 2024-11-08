@@ -62,7 +62,6 @@ def create_generator(input_shape):
     x = LayerNormalization()(x)
     x = layers.LeakyReLU()(x)
 
-
     x = DeformableConv2D(64, 3)(x)
 
     x = LayerNormalization()(x)
@@ -94,25 +93,18 @@ def create_generator(input_shape):
 def create_discriminator(input_shape):
     inputs = layers.Input(shape=input_shape)
 
-
-
-
     x = layers.Conv2D(16, 3, strides=2, padding='same')(inputs)
     x = layers.LeakyReLU()(x)
 
     x = CoordConv(32, 3)(x)
-    x = layers.SpatialDropout2D(0.1)(x)
 
     x = layers.LeakyReLU()(x)
 
     x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
 
-
     x = layers.LeakyReLU()(x)
-    x = layers.SpatialDropout2D(0.1)(x)
 
     x = DeformableConv2D(64, 3)(x)
-
 
     gap = layers.GlobalAveragePooling2D()(x)
     gmp = layers.GlobalMaxPooling2D()(x)
@@ -120,9 +112,8 @@ def create_discriminator(input_shape):
 
     x = layers.Dense(256)(x)
     x = layers.LeakyReLU()(x)
-    x = layers.Dropout(0.25)(x)
 
-    x = layers.Dense(1, activation='sigmoid')(x)  # Output layer for binary classification
+    x = layers.Dense(1)(x)  # Output layer for binary classification
 
     model = Model(inputs, x, name='discriminator_model')
     return model
@@ -134,8 +125,23 @@ def mse_loss(y_true, y_pred):
     return tf.reduce_mean(tf.square(y_true - y_pred))
 
 
+@tf.function
+def gradient_penalty(critic, real_images, fake_images):
+    batch_size = tf.shape(real_images)[0]
+    epsilon = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
+    interpolated = real_images + epsilon * (fake_images - real_images)
+    with tf.GradientTape() as gp_tape:
+        gp_tape.watch(interpolated)
+        pred = critic(interpolated, training=True)
+    grads = gp_tape.gradient(pred, [interpolated])[0]
+    grad_l2 = tf.sqrt(tf.reduce_sum(tf.square(grads), axis=[1, 2, 3]))
+    gp = tf.reduce_mean((grad_l2 - 1.0) ** 2)
+
+    return gp
+
+
 def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
-              log_interval=10, steps_per_epoch=250, steps_per_val=10, lambda_l1=0.1):
+              log_interval=10, steps_per_epoch=250, steps_per_val=10, disc_steps=3, lambda_l1=0.1, lambda_gp=10.0):
     # turn callbacks into a list
     if not isinstance(callbacks, list):
         callbacks = [callbacks]
@@ -148,8 +154,8 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
     logs = {}
     callback_list.on_train_begin(logs=logs)
 
-    generator.compile(optimizer=gen_optimizer, loss='binary_crossentropy')
-    discriminator.compile(optimizer=disc_optimizer, loss='binary_crossentropy')
+    generator.compile(optimizer=gen_optimizer)
+    discriminator.compile(optimizer=disc_optimizer)
 
     generator.summary()
     discriminator.summary()
@@ -162,6 +168,11 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
         # Limit the number of steps per epoch if specified
         steps_in_epoch = steps_per_epoch or len(dataset)
         steps_in_val = steps_per_val or len(val_dataset)
+
+        disc_step_count = 0
+
+        g_loss = tf.constant(-1.0)
+
 
         for step, (clean_images, dirty_images) in enumerate(dataset.take(steps_in_epoch)):  # Use .take to limit steps
             # Generate transformed images
@@ -176,37 +187,34 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
                 real_pred = discriminator(clean_images, training=True)
                 fake_pred = discriminator(transformed_images, training=True)
 
-                # Apply label smoothing
-                real_labels = tf.ones_like(real_pred) * 0.9  # Smooth real labels to 0.9 instead of 1
-                fake_labels = tf.zeros_like(fake_pred) + 0.1  # Smooth fake labels to 0.1 instead of 0
-
-                # Discriminator loss (binary cross-entropy)
-                d_loss_real = tf.keras.losses.binary_crossentropy(real_labels, real_pred)
-                d_loss_fake = tf.keras.losses.binary_crossentropy(fake_labels, fake_pred)
-
                 identity_loss = sum(discriminator.losses)
 
-                # Combine the losses
-                d_loss = ((tf.reduce_mean(d_loss_real) + tf.reduce_mean(d_loss_fake)) / 2) + identity_loss
+                gp = gradient_penalty(discriminator, clean_images, transformed_images)
+
+                d_loss = tf.reduce_mean(fake_pred) - tf.reduce_mean(real_pred) + identity_loss + lambda_gp * gp
 
             # Get discriminator gradients and apply them
             grads_d = tape_d.gradient(d_loss, discriminator.trainable_variables)
             disc_optimizer.apply_gradients(zip(grads_d, discriminator.trainable_variables))
 
-            # Train Generator (via GAN model) manually
-            with tf.GradientTape() as tape_g:
-                generated_images = generator(dirty_images, training=True)
-                gan_output = discriminator(generated_images, training=True)
-                # Generator loss is based on how well the generated images fool the discriminator
+            disc_step_count += 1
+            if disc_step_count >= disc_steps:
+                disc_step_count = 0
 
-                identity_loss = sum(generator.losses)
-                g_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(gan_output),
-                                                                            gan_output)) + lambda_l1 * tf.reduce_mean(
-                    tf.abs(clean_images - generated_images)) + identity_loss
+                # Train Generator (via GAN model) manually
+                with tf.GradientTape() as tape_g:
+                    generated_images = generator(dirty_images, training=True)
+                    gan_output = discriminator(generated_images, training=True)
+                    identity_loss = sum(generator.losses)
+                    g_loss = -tf.reduce_mean(gan_output) + lambda_l1 * tf.reduce_mean(
+                        tf.abs(clean_images - generated_images)) + identity_loss
 
-            # Get generator gradients and apply them
-            grads_g = tape_g.gradient(g_loss, generator.trainable_variables)
-            gen_optimizer.apply_gradients(zip(grads_g, generator.trainable_variables))
+                # Get generator gradients and apply them
+                grads_g = tape_g.gradient(g_loss, generator.trainable_variables)
+                gen_optimizer.apply_gradients(zip(grads_g, generator.trainable_variables))
+
+            else:
+                g_loss = g_loss
 
             # Trigger callbacks
 
@@ -215,12 +223,12 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
             callback_list.on_train_batch_end(step, logs=logs)
 
             if step % log_interval == 0:
-                print(f"Step: {step}/{steps_in_epoch}, D Loss: {d_loss:.4f}, G Loss: {g_loss:.4f}")
+                print(f"Step: {step + log_interval}/{steps_in_epoch}, D Loss: {d_loss:.4f}, G Loss: {g_loss:.4f}")
 
         # Validation step
         val_mse = 0
         val_step = 0  # Initialize the val_step variable
-        for val_step, (val_real_images, val_dirty_images) in enumerate(dataset.take(steps_in_val)):
+        for val_step, (val_real_images, val_dirty_images) in enumerate(val_dataset.take(steps_in_val)):
             callback_list.on_test_batch_begin(val_step, logs=logs)
 
             val_fake_images = generator(val_dirty_images, training=False)
@@ -264,12 +272,12 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
         RollingAverageModelCheckpoint(filepath='best_model.keras', monitor='val_mse', save_best_only=True, mode='min')
     ]
 
-    gen_optimizer = Adafactor(learning_rate=1.0, clipnorm=1.0)
-    adv_optimizer = Adafactor(learning_rate=0.01, clipnorm=1.0)
+    gen_optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4, beta_1=0.0, beta_2=0.9)
+    disc_optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4, beta_1=0.0, beta_2=0.9)
 
     jit = jit if jit else "auto"
 
-    train_gan(generator, discriminator, gen_optimizer, adv_optimizer, dataset, val_dataset, epochs, callbacks,
+    train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
               steps_per_epoch=250, steps_per_val=10, lambda_l1=0.1)
 
     generator.save('qr_correction_model.keras')
