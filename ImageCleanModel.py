@@ -53,6 +53,9 @@ def create_generator(input_shape):
     inputs = layers.Input(shape=input_shape)
 
     x = inputs
+
+    x = CoordConv(8, 3)(x)
+
     x = Conv2DSkip(x, 16, 3, padding='same')
     x = layers.MaxPooling2D(pool_size=(2, 2))(x)  # Downsample by a factor of 2
 
@@ -63,34 +66,27 @@ def create_generator(input_shape):
 
     x = DeformableConv2D(32, 3)(x)
     x = layers.LeakyReLU()(x)
-    x = DeformableConv2D(32, 3)(x)
-
-    x = layers.LeakyReLU()(x)
 
     x = Conv2DSkip(x, 64, 3, padding='same', coordConv=True)
 
-    x = LayerNormalization()(x)
+    x = DeformableConv2D(64, 3)(x)
     x = layers.LeakyReLU()(x)
+
+    x = LayerNormalization()(x)
 
     x = layers.UpSampling2D(size=(2, 2))(x)  # Upsample by a factor of 2
     x = Conv2DSkip(x, 64, 3, padding='same')
 
-    x = FoveatedConvolutionLayer(fovea_size=(64, 64))(x)
-    x = layers.LeakyReLU()(x)
 
     x = layers.UpSampling2D(size=(2, 2))(x)
+    x = Conv2DSkip(x, 32, 3, padding='same')
 
+
+    x = FoveatedConvolutionLayer(fovea_size=(64, 64))(x)
     x = layers.LeakyReLU()(x)
-
-    x = Conv2DSkip(x, 16, 3, padding='same')
-
-    x = SqueezeExcitation(use_residual=False)(x)
-
     x = LayerNormalization()(x)
 
-    x = Conv2DSkip(x, 1, 3, padding='same')
-
-    x = SoftThresholdLayer()(x)
+    x = Conv2DSkip(x, 8, 3, padding='same')
 
     x = layers.LeakyReLU()(x)
 
@@ -300,7 +296,7 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
     jit = jit if jit else "auto"
 
     train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
-              steps_per_epoch=250, steps_per_val=10, disc_steps=6, lambda_l1=0.1)
+              steps_per_epoch=250, steps_per_val=10, disc_steps=1, lambda_l1=0.1)
 
     generator.save('qr_correction_model.keras')
     discriminator.save('discriminator_model.keras')
