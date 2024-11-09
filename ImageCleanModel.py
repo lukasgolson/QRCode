@@ -65,6 +65,8 @@ def create_generator(input_shape):
     x = layers.LeakyReLU()(x)
 
     x = DeformableConv2D(64, 3)(x)
+    x = layers.LeakyReLU()(x)
+    x = DeformableConv2D(64, 3)(x)
 
     x = LayerNormalization()(x)
     x = layers.LeakyReLU()(x)
@@ -180,7 +182,6 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
         disc_step_count = 0
 
         g_loss = tf.constant(-1.0)
-
 
         for step, (clean_images, dirty_images) in enumerate(dataset.take(steps_in_epoch)):  # Use .take to limit steps
             # Generate transformed images
