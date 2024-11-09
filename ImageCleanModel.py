@@ -16,6 +16,7 @@ from RollingAverageCheckpoint import RollingAverageModelCheckpoint
 from layers.CoordConv import CoordConv
 from layers.DeformableConv2D import DeformableConv2D
 from layers.FoveatedConvolution import FoveatedConvolutionLayer
+from layers.SoftThresholdLayer import SoftThresholdLayer
 from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
 from layers.SqueezeExcitation import SqueezeExcitation
@@ -83,6 +84,12 @@ def create_generator(input_shape):
 
     x = LayerNormalization()(x)
 
+    x = Conv2DSkip(x, 1, 3, padding='same')
+
+    x = SoftThresholdLayer()(x)
+
+    x = layers.LeakyReLU()(x)
+
     output = layers.Conv2D(1, 1, activation='sigmoid', padding='same')(x)
 
     # Define the model
@@ -111,7 +118,7 @@ def create_discriminator(input_shape):
     gmp = layers.GlobalMaxPooling2D()(x)
     x = layers.concatenate([gap, gmp])
 
-    x = layers.Dense(256)(x)
+    x = layers.Dense(512)(x)
     x = layers.LeakyReLU()(x)
 
     x = layers.Dense(1)(x)  # Output layer for binary classification
