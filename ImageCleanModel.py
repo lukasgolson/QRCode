@@ -59,14 +59,15 @@ def create_generator(input_shape):
     x = Conv2DSkip(x, 32, 3, padding='same')
     x = layers.MaxPooling2D(pool_size=(2, 2))(x)  # Downsample by a factor of 2
 
+    x = layers.LeakyReLU()(x)
+
+    x = DeformableConv2D(32, 3)(x)
+    x = layers.LeakyReLU()(x)
+    x = DeformableConv2D(32, 3)(x)
+
+    x = layers.LeakyReLU()(x)
+
     x = Conv2DSkip(x, 64, 3, padding='same', coordConv=True)
-
-    x = LayerNormalization()(x)
-    x = layers.LeakyReLU()(x)
-
-    x = DeformableConv2D(64, 3)(x)
-    x = layers.LeakyReLU()(x)
-    x = DeformableConv2D(64, 3)(x)
 
     x = LayerNormalization()(x)
     x = layers.LeakyReLU()(x)
@@ -74,15 +75,16 @@ def create_generator(input_shape):
     x = layers.UpSampling2D(size=(2, 2))(x)  # Upsample by a factor of 2
     x = Conv2DSkip(x, 64, 3, padding='same')
 
-    x = layers.UpSampling2D(size=(2, 2))(x)
-    x = Conv2DSkip(x, 32, 3, padding='same')
-
     x = FoveatedConvolutionLayer(fovea_size=(64, 64))(x)
     x = layers.LeakyReLU()(x)
 
-    x = SqueezeExcitation(use_residual=False)(x)
+    x = layers.UpSampling2D(size=(2, 2))(x)
+
+    x = layers.LeakyReLU()(x)
 
     x = Conv2DSkip(x, 16, 3, padding='same')
+
+    x = SqueezeExcitation(use_residual=False)(x)
 
     x = LayerNormalization()(x)
 
