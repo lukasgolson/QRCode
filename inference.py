@@ -169,6 +169,7 @@ def run_inference(image_path, model, encoder, layer_number=None, save_output=Fal
 
     # get model input shape
 
+
     input_shape = model.input_shape[1:]
 
     print(f"Model input shape: {input_shape}")  # Debug statement

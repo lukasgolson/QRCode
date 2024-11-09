@@ -21,6 +21,7 @@ class PositionalEncoding(keras.layers.Layer):
 
         # Initialize the positional encoding
         self.pos_encoding = positional_encoding(self.length, self.depth)
+        super(PositionalEncoding, self).build(input_shape)
 
     def call(self, inputs):
         """Applies the positional encoding to the input tensor."""

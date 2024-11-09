@@ -7,7 +7,7 @@ import keras
 import tensorflow as tf
 from keras import Model
 from keras.src import layers
-from keras.src.layers import BatchNormalization, LayerNormalization
+from keras.src.layers import BatchNormalization, LayerNormalization, Conv2D, Concatenate
 from keras.src.optimizers import Adafactor
 from tensorflow.keras.callbacks import TensorBoard
 
@@ -16,6 +16,7 @@ from RollingAverageCheckpoint import RollingAverageModelCheckpoint
 from layers.CoordConv import CoordConv
 from layers.DeformableConv2D import DeformableConv2D
 from layers.FoveatedConvolution import FoveatedConvolutionLayer
+from layers.HarmonicConv2D import HarmonicConv2D
 from layers.SoftThresholdLayer import SoftThresholdLayer
 from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
@@ -54,40 +55,28 @@ def create_generator(input_shape):
 
     x = inputs
 
-    x = CoordConv(8, 3)(x)
+    harmonics = HarmonicConv2D(16, 3)(x)
+    deformable = DeformableConv2D(16, 3)(x)
 
-    x = Conv2DSkip(x, 16, 3, padding='same')
-    x = layers.MaxPooling2D(pool_size=(2, 2))(x)  # Downsample by a factor of 2
+    x = Concatenate(axis=-1)([deformable, harmonics])
 
-    x = Conv2DSkip(x, 32, 3, padding='same')
-    x = layers.MaxPooling2D(pool_size=(2, 2))(x)  # Downsample by a factor of 2
+    x = Conv2DSkip(x, 32, 3)
 
+    x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
 
-    x = DeformableConv2D(32, 3)(x)
-    x = layers.LeakyReLU()(x)
-    x = DeformableConv2D(32, 3)(x)
-    x = layers.LeakyReLU()(x)
+    # x = HarmonicConv2D(32, 3)(x)
 
-    x = LayerNormalization()(x)
+    x = DeformableConv2D(64, 3)(x)
 
-    x = layers.UpSampling2D(size=(2, 2))(x)  # Upsample by a factor of 2
-    x = Conv2DSkip(x, 64, 3, padding='same')
+    x = Conv2DSkip(x, 128, 3)
 
+    # upscale
+    x = layers.Conv2DTranspose(64, 3, strides=2, padding='same')(x)
+    x = Conv2DSkip(x, 16, 3)
+    x = Conv2DSkip(x, 8, 3)
 
-    x = layers.UpSampling2D(size=(2, 2))(x)
-    x = Conv2DSkip(x, 32, 3, padding='same')
-
-
-    x = FoveatedConvolutionLayer(fovea_size=(64, 64))(x)
-    x = layers.LeakyReLU()(x)
-    x = LayerNormalization()(x)
-
-    x = Conv2DSkip(x, 8, 3, padding='same')
-
-    x = layers.LeakyReLU()(x)
-
-    output = layers.Conv2D(1, 1, activation='sigmoid', padding='same')(x)
+    output = Conv2D(1, 1, padding='same', activation='sigmoid')(x)
 
     # Define the model
     model = Model(inputs, output, name='qr_correction_model')
@@ -102,6 +91,9 @@ def create_discriminator(input_shape):
     # Concatenate inputs along the channel axis
     x = layers.Concatenate(axis=-1)([dirty_inputs, clean_inputs])
 
+    harmonics = HarmonicConv2D(8, 3)(x)
+    x = Concatenate(axis=-1)([x, harmonics])
+
     x = layers.Conv2D(16, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
 
@@ -113,7 +105,7 @@ def create_discriminator(input_shape):
 
     x = layers.LeakyReLU()(x)
 
-    x = DeformableConv2D(64, 3)(x)
+    x = DeformableConv2D(128, 3)(x)
 
     gap = layers.GlobalAveragePooling2D()(x)
     gmp = layers.GlobalMaxPooling2D()(x)
