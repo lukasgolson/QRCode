@@ -103,9 +103,13 @@ def create_generator(input_shape):
 
 
 def create_discriminator(input_shape):
-    inputs = layers.Input(shape=input_shape)
+    dirty_inputs = layers.Input(shape=input_shape, name='dirty_input')
+    clean_inputs = layers.Input(shape=input_shape, name='clean_input')
 
-    x = layers.Conv2D(16, 3, strides=2, padding='same')(inputs)
+    # Concatenate inputs along the channel axis
+    x = layers.Concatenate(axis=-1)([dirty_inputs, clean_inputs])
+
+    x = layers.Conv2D(16, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
 
     x = CoordConv(32, 3)(x)
@@ -127,7 +131,7 @@ def create_discriminator(input_shape):
 
     x = layers.Dense(1)(x)  # Output layer for binary classification
 
-    model = Model(inputs, x, name='discriminator_model')
+    model = Model(inputs=[dirty_inputs, clean_inputs], outputs=x, name='discriminator_model')
     return model
 
 
@@ -138,17 +142,21 @@ def mse_loss(y_true, y_pred):
 
 
 @tf.function
-def gradient_penalty(critic, real_images, fake_images):
+def gradient_penalty(critic, dirty_images, real_images, fake_images):
     batch_size = tf.shape(real_images)[0]
     epsilon = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
-    interpolated = real_images + epsilon * (fake_images - real_images)
+
+    # Interpolate between real and fake clean images
+    interpolated_clean_images = epsilon * real_images + (1 - epsilon) * fake_images
+
     with tf.GradientTape() as gp_tape:
-        gp_tape.watch(interpolated)
-        pred = critic(interpolated, training=True)
-    grads = gp_tape.gradient(pred, [interpolated])[0]
+        gp_tape.watch(interpolated_clean_images)
+        # Critic prediction on interpolated images with dirty images fixed
+        pred = critic([dirty_images, interpolated_clean_images], training=True)
+
+    grads = gp_tape.gradient(pred, [interpolated_clean_images])[0]
     grad_l2 = tf.sqrt(tf.reduce_sum(tf.square(grads), axis=[1, 2, 3]))
     gp = tf.reduce_mean((grad_l2 - 1.0) ** 2)
-
     return gp
 
 
@@ -195,12 +203,13 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
 
             # Train Discriminator manually
             with tf.GradientTape() as tape_d:
-                real_pred = discriminator(clean_images, training=True)
-                fake_pred = discriminator(transformed_images, training=True)
+                real_pred = discriminator([dirty_images, clean_images], training=True)
+                # Fake pairs (dirty image, generated image)
+                fake_pred = discriminator([dirty_images, transformed_images], training=True)
 
                 identity_loss = sum(discriminator.losses)
 
-                gp = gradient_penalty(discriminator, clean_images, transformed_images)
+                gp = gradient_penalty(discriminator, dirty_images, clean_images, transformed_images)
 
                 d_loss = tf.reduce_mean(fake_pred) - tf.reduce_mean(real_pred) + identity_loss + lambda_gp * gp
 
@@ -215,7 +224,7 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
                 # Train Generator (via GAN model) manually
                 with tf.GradientTape() as tape_g:
                     generated_images = generator(dirty_images, training=True)
-                    gan_output = discriminator(generated_images, training=True)
+                    gan_output = discriminator([dirty_images, generated_images], training=True)
                     identity_loss = sum(generator.losses)
                     g_loss = -tf.reduce_mean(gan_output) + lambda_l1 * tf.reduce_mean(
                         tf.abs(clean_images - generated_images)) + identity_loss
@@ -243,7 +252,6 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
             callback_list.on_test_batch_begin(val_step, logs=logs)
 
             val_fake_images = generator(val_dirty_images, training=False)
-            # Accumulate the squared differences (MSE)
             val_mse += tf.reduce_mean(tf.square(val_real_images - val_fake_images)).numpy()
 
             callback_list.on_test_batch_end(val_step, logs=logs)
