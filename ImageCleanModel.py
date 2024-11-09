@@ -56,9 +56,12 @@ def create_generator(input_shape):
     x = inputs
 
     harmonics = HarmonicConv2D(16, 3)(x)
-    deformable = DeformableConv2D(16, 3)(x)
+    localCnn = Conv2DSkip(x, 8, 3)(x)
+    globalCnn = Conv2DSkip(x, 8, 3)(localCnn)
 
-    x = Concatenate(axis=-1)([deformable, harmonics])
+    x = Concatenate(axis=-1)([localCnn, globalCnn, harmonics])
+
+    x = layers.LeakyReLU()(x)
 
     x = Conv2DSkip(x, 32, 3)
 
@@ -101,11 +104,13 @@ def create_discriminator(input_shape):
 
     x = layers.LeakyReLU()(x)
 
-    x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
+    x = DeformableConv2D(64, 3)(x)
+
 
     x = layers.LeakyReLU()(x)
 
-    x = DeformableConv2D(128, 3)(x)
+    x = layers.Conv2D(128, 3, strides=2, padding='same')(x)
+
 
     gap = layers.GlobalAveragePooling2D()(x)
     gmp = layers.GlobalMaxPooling2D()(x)
