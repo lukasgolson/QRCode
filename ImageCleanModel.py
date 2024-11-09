@@ -300,7 +300,7 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
     jit = jit if jit else "auto"
 
     train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
-              steps_per_epoch=250, steps_per_val=10, lambda_l1=0.1)
+              steps_per_epoch=250, steps_per_val=10, disc_steps=6, lambda_l1=0.1)
 
     generator.save('qr_correction_model.keras')
     discriminator.save('discriminator_model.keras')
