@@ -63,6 +63,8 @@ def create_generator(input_shape):
 
     x = layers.LeakyReLU()(x)
 
+    x = DeformableConv2D(32, 3, 4)(x)
+
     x = Conv2DSkip(x, 32, 3)
 
     x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
@@ -104,6 +106,11 @@ def create_discriminator(input_shape):
     x = layers.LeakyReLU()(x)
 
     x = DeformableConv2D(64, 3, 4)(x)
+
+    x = layers.LeakyReLU()(x)
+
+    x = DeformableConv2D(128, 3, 4)(x)
+
 
     x = layers.LeakyReLU()(x)
 

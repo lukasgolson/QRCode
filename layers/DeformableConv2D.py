@@ -1,4 +1,5 @@
 import tensorflow as tf
+from keras.src.layers import DepthwiseConv2D
 from tensorflow.keras.layers import Layer, Conv2D
 from tensorflow.keras.initializers import Zeros
 
@@ -8,19 +9,18 @@ class DeformableConv2D(Layer):
         self.filters = filters
         self.kernel_size = kernel_size
         self.num_groups = num_groups
-        self.offset_channels = 2 * kernel_size * kernel_size
+        self.offset_channels = 2 * kernel_size * kernel_size  # Offset channels per kernel position
 
         # Number of filters per group
         self.group_filters = filters // num_groups
-        self.group_offset_channels = self.offset_channels  # One offset map per group
 
-        # Initial 1x1 convolution to recombine channels for grouping
+        # Initial 1x1 convolution to adjust channel count for grouping
         self.initial_conv_layer = None
 
-        # Offset convolution layers - one per group
+        # One offset convolution layer per group (shared across channels within each group)
         self.conv_offset_groups = [
             Conv2D(
-                self.group_offset_channels,
+                self.offset_channels,  # Only one set of offsets per group
                 kernel_size=kernel_size,
                 padding="same",
                 kernel_initializer=Zeros(),
@@ -29,11 +29,11 @@ class DeformableConv2D(Layer):
 
         # Convolutional layers for each group
         self.conv_groups = [
-            Conv2D(
-                self.group_filters,
-                kernel_size=kernel_size,
-                padding="same"
-            ) for _ in range(num_groups)
+            tf.keras.Sequential([
+                DepthwiseConv2D(kernel_size=self.kernel_size, padding="same"),
+                Conv2D(self.group_filters, kernel_size=1, padding="same")
+            ])
+            for _ in range(num_groups)
         ]
 
     def build(self, input_shape):
@@ -48,6 +48,7 @@ class DeformableConv2D(Layer):
         assert channels % self.num_groups == 0, "Channels must be divisible by num_groups"
         self.group_channels = channels // self.num_groups
 
+        # Build offset and convolution layers for each group
         for conv_offset in self.conv_offset_groups:
             conv_offset.build([batch_size, height, width, self.group_channels])
         for conv in self.conv_groups:
@@ -64,13 +65,13 @@ class DeformableConv2D(Layer):
         group_outputs = []
 
         for i in range(self.num_groups):
-            # Calculate the offset for each group only once
+            # Calculate the offset for each group only once and apply to all channels in that group
             offsets = self.conv_offset_groups[i](group_inputs[i])
 
             # Sample using the same offset map for all channels in the group
             sampled_values = self._sample_with_offsets(group_inputs[i], offsets)
 
-            # Apply group convolution to the sampled values
+            # Apply the group convolution to the sampled values
             group_output = self.conv_groups[i](sampled_values)
             group_outputs.append(group_output)
 
@@ -81,23 +82,26 @@ class DeformableConv2D(Layer):
     def _sample_with_offsets(self, inputs, offsets):
         batch_size, height, width, channels = tf.shape(inputs)[0], tf.shape(inputs)[1], tf.shape(inputs)[2], inputs.shape[3]
 
+        # Prepare the grid
         grid_y, grid_x = tf.meshgrid(
             tf.range(height, dtype=tf.float32), tf.range(width, dtype=tf.float32), indexing="ij"
         )
-
         grid = tf.stack((grid_x, grid_y), axis=-1)  # Shape: [height, width, 2]
         grid = tf.expand_dims(grid, axis=0)  # Shape: [1, height, width, 2]
 
-        # Reshape offsets for single mask across group channels
+        # Reshape offsets to apply one shared mask per group
         offsets = tf.reshape(
             offsets, [batch_size, height, width, self.kernel_size * self.kernel_size, 2]
         )
 
+        # Generate kernel grid offsets
         kernel_grid = self._get_kernel_grid()
         kernel_grid = tf.reshape(kernel_grid, [1, 1, 1, self.kernel_size * self.kernel_size, 2])
 
+        # Compute sampling locations by adding the offsets
         sampling_locations = grid[:, :, :, None, :] + kernel_grid + offsets
 
+        # Clip sampling locations to stay within bounds
         sampling_locations = tf.stack(
             [
                 tf.clip_by_value(sampling_locations[..., 0], 0, tf.cast(width - 1, tf.float32)),
@@ -106,12 +110,15 @@ class DeformableConv2D(Layer):
             axis=-1,
         )
 
+        # Flatten sampling locations for interpolation
         sampling_locations = tf.reshape(
             sampling_locations, [batch_size, height * width * self.kernel_size * self.kernel_size, 2]
         )
 
+        # Perform bilinear interpolation
         sampled_values = self._bilinear_interpolate(inputs, sampling_locations)
 
+        # Reshape sampled values to [batch_size, height, width, kernel_size * kernel_size * channels]
         sampled_values = tf.reshape(
             sampled_values,
             [batch_size, height, width, self.kernel_size * self.kernel_size * channels],
