@@ -123,8 +123,9 @@ def gradient_penalty(critic, dirty_images, real_images, fake_images):
 
 
 def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
-              log_interval=10, steps_per_epoch=250, steps_per_val=10, disc_steps=3, lambda_l1=0.1, lambda_gp=10.0):
-    # turn callbacks into a list
+              log_interval=10, steps_per_epoch=250, steps_per_val=10, disc_steps=3, lambda_l1=0.1, lambda_gp=10.0,
+              accumulation_steps=4):  # New parameter for gradient accumulation steps
+    # Ensure callbacks are a list
     if not isinstance(callbacks, list):
         callbacks = [callbacks]
 
@@ -142,48 +143,46 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
     generator.summary()
     discriminator.summary()
 
+    # Initialize gradient accumulation variables
+    accumulated_grads_g = [tf.zeros_like(var) for var in generator.trainable_variables]
+    accumulated_grads_d = [tf.zeros_like(var) for var in discriminator.trainable_variables]
+
     for epoch in range(epochs):
         callback_list.on_epoch_begin(epoch, logs=logs)
-
         print(f"Epoch {epoch + 1}/{epochs}")
 
-        # Limit the number of steps per epoch if specified
         steps_in_epoch = steps_per_epoch or len(dataset)
         steps_in_val = steps_per_val or len(val_dataset)
 
         disc_step_count = 0
-
         g_loss = tf.constant(-1.0)
 
-        for step, (clean_images, dirty_images) in enumerate(dataset.take(steps_in_epoch)):  # Use .take to limit steps
-            # Generate transformed images
-
+        for step, (clean_images, dirty_images) in enumerate(dataset.take(steps_in_epoch)):
             callback_list.on_batch_begin(step, logs=logs)
             callback_list.on_train_batch_begin(step, logs=logs)
 
             transformed_images = generator(dirty_images, training=True)
 
-            # Train Discriminator manually
+            # Accumulate Discriminator gradients
             with tf.GradientTape() as tape_d:
                 real_pred = discriminator([dirty_images, clean_images], training=True)
-                # Fake pairs (dirty image, generated image)
                 fake_pred = discriminator([dirty_images, transformed_images], training=True)
 
                 identity_loss = sum(discriminator.losses)
-
                 gp = gradient_penalty(discriminator, dirty_images, clean_images, transformed_images)
 
                 d_loss = tf.reduce_mean(fake_pred) - tf.reduce_mean(real_pred) + identity_loss + lambda_gp * gp
 
-            # Get discriminator gradients and apply them
             grads_d = tape_d.gradient(d_loss, discriminator.trainable_variables)
-            disc_optimizer.apply_gradients(zip(grads_d, discriminator.trainable_variables))
+
+            # Accumulate gradients
+            accumulated_grads_d = [accum_grad + grad for accum_grad, grad in zip(accumulated_grads_d, grads_d)]
 
             disc_step_count += 1
             if disc_step_count >= disc_steps:
                 disc_step_count = 0
 
-                # Train Generator (via GAN model) manually
+                # Accumulate Generator gradients
                 with tf.GradientTape() as tape_g:
                     generated_images = generator(dirty_images, training=True)
                     gan_output = discriminator([dirty_images, generated_images], training=True)
@@ -191,17 +190,25 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
                     g_loss = -tf.reduce_mean(gan_output) + lambda_l1 * tf.reduce_mean(
                         tf.abs(clean_images - generated_images)) + identity_loss
 
-                # Get generator gradients and apply them
                 grads_g = tape_g.gradient(g_loss, generator.trainable_variables)
-                gen_optimizer.apply_gradients(zip(grads_g, generator.trainable_variables))
+                accumulated_grads_g = [accum_grad + grad for accum_grad, grad in zip(accumulated_grads_g, grads_g)]
 
-            else:
-                g_loss = g_loss
+            # Apply gradients after accumulation steps
+            if (step + 1) % accumulation_steps == 0:
+                # Apply accumulated gradients to the discriminator
+                disc_optimizer.apply_gradients(
+                    [(grad / accumulation_steps, var) for grad, var in zip(accumulated_grads_d, discriminator.trainable_variables)]
+                )
+                accumulated_grads_d = [tf.zeros_like(var) for var in discriminator.trainable_variables]
+
+                # Apply accumulated gradients to the generator
+                gen_optimizer.apply_gradients(
+                    [(grad / accumulation_steps, var) for grad, var in zip(accumulated_grads_g, generator.trainable_variables)]
+                )
+                accumulated_grads_g = [tf.zeros_like(var) for var in generator.trainable_variables]
 
             # Trigger callbacks
-
             logs = {'d_loss': d_loss, 'g_loss': g_loss}
-
             callback_list.on_train_batch_end(step, logs=logs)
 
             if step % log_interval == 0:
@@ -209,20 +216,15 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
 
         # Validation step
         val_mse = 0
-        val_step = 0  # Initialize the val_step variable
         for val_step, (val_real_images, val_dirty_images) in enumerate(val_dataset.take(steps_in_val)):
             callback_list.on_test_batch_begin(val_step, logs=logs)
-
             val_fake_images = generator(val_dirty_images, training=False)
             val_mse += tf.reduce_mean(tf.square(val_real_images - val_fake_images)).numpy()
-
             callback_list.on_test_batch_end(val_step, logs=logs)
 
-        # Average MSE over all validation steps
-        val_mse /= (val_step + 1)  # `val_step` is the index of the last batch, so +1 for the total number of steps
+        val_mse /= (val_step + 1)
         print(f"Validation MSE after Epoch {epoch + 1}: {val_mse:.4f}")
 
-        # Trigger callbacks
         logs = {'d_loss': d_loss, 'g_loss': g_loss, 'val_mse': val_mse}
         callback_list.on_epoch_end(epoch, logs=logs)
 
