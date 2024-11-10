@@ -97,7 +97,7 @@ def create_discriminator(input_shape):
     # Concatenate inputs along the channel axis
     x = layers.Concatenate(axis=-1)([dirty_inputs, clean_inputs])
 
-    harmonics = HarmonicConv2D(3, 3)(x)
+    harmonics = HarmonicConv2D(8, 3)(x)
     x = Concatenate(axis=-1)([x, harmonics])
 
     x = layers.Conv2D(16, 3, strides=2, padding='same')(x)
