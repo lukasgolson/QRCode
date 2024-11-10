@@ -55,7 +55,7 @@ def create_generator(input_shape):
 
     x = inputs
 
-    harmonic = HarmonicConv2D(8, 3, num_groups=4)(x)
+    harmonic = HarmonicConv2D(8, 3, num_groups=1)(x)
     localCnn = layers.Conv2D(8, 3, padding='same')(x)
     globalCnn = layers.Conv2D(8, 3, padding='same')(localCnn)
 
