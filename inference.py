@@ -8,6 +8,7 @@ import numpy as np
 from PIL import Image
 from tensorflow.keras.models import load_model, Model
 
+import GanTrainingLoop
 from char_level_encoder import CharLevelEncoder
 from train import masked_categorical_crossentropy
 
@@ -26,9 +27,9 @@ def load_latest_model(model_dir):
 
     latest_model_file = max(model_files, key=os.path.getmtime)
     print(f"Loading latest model: {latest_model_file}")
-    model = load_model(latest_model_file, custom_objects={'loss_func': ImageCleanModel.mse_loss}, compile=False)
+    model = load_model(latest_model_file, custom_objects={'loss_func': GanTrainingLoop.mse_loss}, compile=False)
 
-    model.compile(optimizer='adamw', loss=ImageCleanModel.mse_loss, metrics=['accuracy'])
+    model.compile(optimizer='adamw', loss=GanTrainingLoop.mse_loss, metrics=['accuracy'])
 
     print("Model loaded successfully.")  # Debug statement
 
