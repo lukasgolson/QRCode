@@ -55,32 +55,37 @@ def create_generator(input_shape):
 
     x = inputs
 
-    harmonics = HarmonicConv2D(16, 3)(x)
+    harmonics = HarmonicConv2D(8, 3)(x)
     localCnn = layers.Conv2D(8, 3, padding='same')(x)
     globalCnn = layers.Conv2D(8, 3, padding='same')(localCnn)
 
     x = Concatenate(axis=-1)([localCnn, globalCnn, harmonics])
+
+    x = DeformableConv2D(32, 3, 4)(x)
+
+    x = layers.LeakyReLU()(x)
+
+
 
     x = Conv2DSkip(x, 48, 3)
 
 
     x = layers.LeakyReLU()(x)
 
-    x = DeformableConv2D(64, 3, 4)(x)
 
-    x = Conv2DSkip(x, 96, 3)
+    x = Conv2DSkip(x, 48, 3)
 
-    x = layers.Conv2D(128, 3, strides=2, padding='same')(x)
+    x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
 
     # x = HarmonicConv2D(32, 3)(x)
 
-    x = DeformableConv2D(128, 3, 4)(x)
+    x = DeformableConv2D(64, 3, 4)(x)
 
 
     # upscale
-    x = layers.Conv2DTranspose(64, 3, strides=2, padding='same')(x)
-    x = Conv2DSkip(x, 16, 3)
+    x = layers.Conv2DTranspose(32, 3, strides=2, padding='same')(x)
+    x = Conv2DSkip(x, 32, 3)
 
     output = Conv2D(1, 1, padding='same', activation='sigmoid')(x)
 
@@ -103,20 +108,20 @@ def create_discriminator(input_shape):
 
     x = Concatenate(axis=-1)([conv, harmonics])
 
-    x = CoordConv(32, 3)(x)
+    x = CoordConv(16, 3)(x)
 
     x = layers.LeakyReLU()(x)
 
-    x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
+    x = layers.Conv2D(32, 3, strides=2, padding='same')(x)
 
 
     x = layers.LeakyReLU()(x)
 
-    x = DeformableConv2D(96, 3, 8)(x)
+    x = DeformableConv2D(32, 3, 8)(x)
 
     x = layers.LeakyReLU()(x)
 
-    x = layers.Conv2D(128, 3, padding='same')(x)
+    x = layers.Conv2D(64, 3, padding='same')(x)
 
     x = layers.LeakyReLU()(x)
 
