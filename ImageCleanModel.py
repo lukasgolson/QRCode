@@ -60,7 +60,7 @@ def create_generator(input_shape):
 
     x = Concatenate(axis=-1)([localCnn, globalCnn])
 
-    x = Conv2DSkip(x, 64, 3)
+    x = Conv2DSkip(x, 32, 3, coordConv=True)
 
     x = layers.LeakyReLU()(x)
 
@@ -176,7 +176,10 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
             grads_d = tape_d.gradient(d_loss, discriminator.trainable_variables)
 
             # Accumulate gradients
-            accumulated_grads_d = [accum_grad + grad for accum_grad, grad in zip(accumulated_grads_d, grads_d)]
+            accumulated_grads_d = [
+                accum_grad + (grad if grad is not None else tf.zeros_like(accum_grad))
+                for accum_grad, grad in zip(accumulated_grads_d, grads_d)
+            ]
 
             disc_step_count += 1
             if disc_step_count >= disc_steps:
@@ -191,7 +194,10 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
                         tf.abs(clean_images - generated_images)) + identity_loss
 
                 grads_g = tape_g.gradient(g_loss, generator.trainable_variables)
-                accumulated_grads_g = [accum_grad + grad for accum_grad, grad in zip(accumulated_grads_g, grads_g)]
+                accumulated_grads_g = [
+                    accum_grad + (grad if grad is not None else tf.zeros_like(accum_grad))
+                    for accum_grad, grad in zip(accumulated_grads_g, grads_g)
+                ]
 
             # Apply gradients after accumulation steps
             if (step + 1) % accumulation_steps == 0:
