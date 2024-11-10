@@ -108,10 +108,7 @@ def create_discriminator(input_shape):
 
     x = layers.LeakyReLU()(x)
 
-
-
-
-    x = layers.Conv2D(128, 3, strides=2, padding='same')(x)
+    x = layers.Conv2D(96, 3, strides=2, padding='same')(x)
 
     x = layers.LeakyReLU()(x)
 
