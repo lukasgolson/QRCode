@@ -27,6 +27,7 @@ from layers.SqueezeExcitation import SqueezeExcitation
 
 keras.config.set_dtype_policy("mixed_float16")
 
+
 def Conv2DSkip(input_layer, filters, kernel_size, padding='same', coordConv=False):
     # Define the convolutional skip layer with Squeeze Excitation
     skip = input_layer
@@ -44,18 +45,23 @@ def Conv2DSkip(input_layer, filters, kernel_size, padding='same', coordConv=Fals
     x = layers.LeakyReLU()(x)
     return x
 
+
 def create_generator(input_shape):
     inputs = layers.Input(shape=input_shape)
     x = inputs
-    localCnn = layers.Conv2D(8, 3, padding='same')(x)
-    globalCnn = layers.Conv2D(8, 3, padding='same')(localCnn)
+    localCnn = layers.Conv2D(4, 3, padding='same')(x)
+    globalCnn = layers.Conv2D(4, 3, padding='same')(localCnn)
     x = Concatenate(axis=-1)([localCnn, globalCnn])
-    x = Conv2DSkip(x, 32, 3, coordConv=True)
-    x = DeformableConv2D(64, 3, 4)(x)
+    x = DeformableConv2D(16, 3, 1)(x)
     x = layers.LeakyReLU()(x)
+    x = DeformableConv2D(32, 3, 2)(x)
+    x = layers.LeakyReLU()(x)
+    x = Conv2DSkip(x, 48, 3, coordConv=True)
+    x = Conv2DSkip(x, 64, 3, coordConv=True)
     output = Conv2D(1, 1, padding='same', activation='sigmoid', dtype='float32')(x)
     model = Model(inputs, output, name='qr_correction_model')
     return model
+
 
 def create_discriminator(input_shape):
     dirty_inputs = layers.Input(shape=input_shape, name='dirty_input')
@@ -81,10 +87,12 @@ def create_discriminator(input_shape):
     model = Model(inputs=[dirty_inputs, clean_inputs], outputs=x, name='discriminator_model')
     return model
 
+
 @tf.function
 @keras.saving.register_keras_serializable()
 def mse_loss(y_true, y_pred):
     return tf.reduce_mean(tf.square(y_true - y_pred))
+
 
 @tf.function
 def gradient_penalty(critic, dirty_images, real_images, fake_images):
@@ -98,6 +106,7 @@ def gradient_penalty(critic, dirty_images, real_images, fake_images):
     grad_l2 = tf.sqrt(tf.reduce_sum(tf.square(grads), axis=[1, 2, 3]))
     gp = tf.reduce_mean((grad_l2 - 1.0) ** 2)
     return gp
+
 
 def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
               log_interval=10, steps_per_epoch=250, steps_per_log=10, disc_steps=3, lambda_l1=0.1, lambda_gp=10.0,
@@ -173,12 +182,14 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
             # Apply gradients after accumulation steps
             if (step + 1) % accumulation_steps == 0:
                 disc_optimizer.apply_gradients(
-                    [(grad / accumulation_steps, var) for grad, var in zip(accumulated_grads_d, discriminator.trainable_variables)]
+                    [(grad / accumulation_steps, var) for grad, var in
+                     zip(accumulated_grads_d, discriminator.trainable_variables)]
                 )
                 accumulated_grads_d = [tf.zeros_like(var) for var in discriminator.trainable_variables]
 
                 gen_optimizer.apply_gradients(
-                    [(grad / accumulation_steps, var) for grad, var in zip(accumulated_grads_g, generator.trainable_variables)]
+                    [(grad / accumulation_steps, var) for grad, var in
+                     zip(accumulated_grads_g, generator.trainable_variables)]
                 )
                 accumulated_grads_g = [tf.zeros_like(var) for var in generator.trainable_variables]
 
@@ -203,6 +214,7 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
         callback_list.on_epoch_end(epoch, logs=logs)
 
     callback_list.on_train_end(logs=logs)
+
 
 def train_model(resolution=256, epochs=100, batch_size=32, accumulation_steps=4, jit=False):
     strategy = tf.distribute.MirroredStrategy()
@@ -238,6 +250,7 @@ def train_model(resolution=256, epochs=100, batch_size=32, accumulation_steps=4,
 
     generator.save('qr_correction_model.keras')
     discriminator.save('discriminator_model.keras')
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

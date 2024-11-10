@@ -115,59 +115,61 @@ class DeformableConv2D(Layer):
 
     @tf.function
     def _batched_bilinear_interpolate(self, inputs, sampling_locations):
-        batch_size, height, width, channels = tf.shape(inputs)[0], tf.shape(inputs)[1], tf.shape(inputs)[2], inputs.shape[3]
+        # Define the shapes for efficient indexing
+        batch_size = tf.shape(inputs)[0]
+        height, width = tf.shape(inputs)[1], tf.shape(inputs)[2]
         num_sampling_points = tf.shape(sampling_locations)[1]
 
-        x = tf.cast(sampling_locations[..., 0], dtype=self.compute_dtype)
-        y = tf.cast(sampling_locations[..., 1], dtype=self.compute_dtype)
+        # Precast sampling locations once
+        x, y = tf.cast(sampling_locations[..., 0], dtype=self.compute_dtype), tf.cast(sampling_locations[..., 1], dtype=self.compute_dtype)
 
-        x0 = tf.floor(x)
-        x1 = x0 + 1
-        y0 = tf.floor(y)
-        y1 = y0 + 1
+        # Calculate integer floor and ceiling coordinates
+        x0, y0 = tf.floor(x), tf.floor(y)
+        x1, y1 = x0 + 1, y0 + 1
+
+        # Convert width and height to self.compute_dtype for consistency
+        width, height = tf.cast(width, self.compute_dtype), tf.cast(height, self.compute_dtype)
 
         # Clip coordinates
-        x0 = tf.clip_by_value(x0, 0, tf.cast(width - 1, self.compute_dtype))
-        x1 = tf.clip_by_value(x1, 0, tf.cast(width - 1, self.compute_dtype))
-        y0 = tf.clip_by_value(y0, 0, tf.cast(height - 1, self.compute_dtype))
-        y1 = tf.clip_by_value(y1, 0, tf.cast(height - 1, self.compute_dtype))
+        x0, x1 = tf.clip_by_value(x0, 0, width - 1), tf.clip_by_value(x1, 0, width - 1)
+        y0, y1 = tf.clip_by_value(y0, 0, height - 1), tf.clip_by_value(y1, 0, height - 1)
 
         # Bilinear interpolation weights
-        wa = (x1 - x) * (y1 - y)
-        wb = (x1 - x) * (y - y0)
-        wc = (x - x0) * (y1 - y)
-        wd = (x - x0) * (y - y0)
+        wa, wb = (x1 - x) * (y1 - y), (x1 - x) * (y - y0)
+        wc, wd = (x - x0) * (y1 - y), (x - x0) * (y - y0)
 
-        # Convert indices to int32 for gathering
+        # Convert indices to int32 once
         x0, x1 = tf.cast(x0, tf.int32), tf.cast(x1, tf.int32)
         y0, y1 = tf.cast(y0, tf.int32), tf.cast(y1, tf.int32)
 
-        # Flatten inputs for gather
-        inputs_flat = tf.reshape(inputs, [batch_size * height * width, channels])
-        base = tf.range(batch_size) * height * width
-        base = tf.reshape(base, [batch_size, 1])
-        base = tf.tile(base, [1, num_sampling_points])
+        # Create base indices for each batch
+        batch_indices = tf.range(batch_size)[:, None]
+        batch_indices = tf.tile(batch_indices, [1, num_sampling_points])
 
-        # Compute indices for each corner
-        idx_a = base + y0 * width + x0
-        idx_b = base + y1 * width + x0
-        idx_c = base + y0 * width + x1
-        idx_d = base + y1 * width + x1
+        # Reshape batch_indices to match y0 and x0 shapes
+        batch_indices = tf.reshape(batch_indices, [batch_size, num_sampling_points])
 
-        # Gather and apply weights
-        Ia = tf.gather(inputs_flat, tf.reshape(idx_a, [-1]))
-        Ib = tf.gather(inputs_flat, tf.reshape(idx_b, [-1]))
-        Ic = tf.gather(inputs_flat, tf.reshape(idx_c, [-1]))
-        Id = tf.gather(inputs_flat, tf.reshape(idx_d, [-1]))
+        # Stack indices for gather_nd (shape: [batch_size, num_sampling_points, 3])
+        idx_a = tf.stack([batch_indices, y0, x0], axis=-1)
+        idx_b = tf.stack([batch_indices, y1, x0], axis=-1)
+        idx_c = tf.stack([batch_indices, y0, x1], axis=-1)
+        idx_d = tf.stack([batch_indices, y1, x1], axis=-1)
 
-        # Reshape and apply weights
-        Ia = tf.reshape(Ia, [batch_size, num_sampling_points, channels])
-        Ib = tf.reshape(Ib, [batch_size, num_sampling_points, channels])
-        Ic = tf.reshape(Ic, [batch_size, num_sampling_points, channels])
-        Id = tf.reshape(Id, [batch_size, num_sampling_points, channels])
+        # Gather values using gather_nd
+        Ia = tf.gather_nd(inputs, idx_a)
+        Ib = tf.gather_nd(inputs, idx_b)
+        Ic = tf.gather_nd(inputs, idx_c)
+        Id = tf.gather_nd(inputs, idx_d)
 
-        wa, wb, wc, wd = map(lambda w: tf.cast(tf.expand_dims(w, axis=-1), dtype=self.compute_dtype), [wa, wb, wc, wd])
-        return wa * Ia + wb * Ib + wc * Ic + wd * Id
+        # Reshape and apply weights in-place to avoid redundant expansions
+        wa, wb, wc, wd = map(lambda w: tf.expand_dims(w, axis=-1), [wa, wb, wc, wd])
+
+        # Compute final interpolated values
+        output = wa * Ia + wb * Ib + wc * Ic + wd * Id
+        return output
+
+
+
 
     def compute_output_shape(self, input_shape):
         return input_shape[:3] + (self.filters,)
