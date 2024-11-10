@@ -62,6 +62,8 @@ def create_generator(input_shape):
 
     x = Conv2DSkip(x, 32, 3, coordConv=True)
 
+    x = DeformableConv2D(64, 3, 4)(x)
+
     x = layers.LeakyReLU()(x)
 
     output = Conv2D(1, 1, padding='same', activation='sigmoid')(x)
@@ -123,7 +125,7 @@ def gradient_penalty(critic, dirty_images, real_images, fake_images):
 
 
 def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
-              log_interval=10, steps_per_epoch=250, steps_per_val=10, disc_steps=3, lambda_l1=0.1, lambda_gp=10.0,
+              log_interval=10, steps_per_epoch=250, steps_per_log=10, disc_steps=3, lambda_l1=0.1, lambda_gp=10.0,
               accumulation_steps=4):  # New parameter for gradient accumulation steps
     # Ensure callbacks are a list
     if not isinstance(callbacks, list):
@@ -152,7 +154,7 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
         print(f"Epoch {epoch + 1}/{epochs}")
 
         steps_in_epoch = steps_per_epoch or len(dataset)
-        steps_in_val = steps_per_val or len(val_dataset)
+        steps_in_val = steps_per_log or len(val_dataset)
 
         disc_step_count = 0
         g_loss = tf.constant(-1.0)
@@ -222,6 +224,7 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
 
         # Validation step
         val_mse = 0
+        val_step = 0
         for val_step, (val_real_images, val_dirty_images) in enumerate(val_dataset.take(steps_in_val)):
             callback_list.on_test_batch_begin(val_step, logs=logs)
             val_fake_images = generator(val_dirty_images, training=False)
@@ -237,7 +240,7 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
     callback_list.on_train_end(logs=logs)
 
 
-def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
+def train_model(resolution=256, epochs=100, batch_size=32, accumulation_steps=4, jit=False):
     strategy = tf.distribute.MirroredStrategy()
 
     # with strategy.scope():
@@ -270,7 +273,7 @@ def train_model(resolution=256, epochs=100, batch_size=32, jit=False):
     jit = jit if jit else "auto"
 
     train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
-              steps_per_epoch=250, steps_per_val=10, disc_steps=1, lambda_l1=0.1)
+              steps_per_epoch=250, accumulation_steps=accumulation_steps, steps_per_log=10, disc_steps=1, lambda_l1=0.1)
 
     generator.save('qr_correction_model.keras')
     discriminator.save('discriminator_model.keras')
@@ -280,10 +283,12 @@ if __name__ == '__main__':
     # get batch size argument
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--accumulation_steps", type=int, default=4)
     parser.add_argument("-JIT", nargs="?", default=False, const=True, type=bool,
                         help="Enable Just-In-Time compilation.")
 
     batch_size = parser.parse_args().batch_size
     jit_compile = parser.parse_args().JIT
+    accumulation = parser.parse_args().accumulation_steps
 
-    train_model(batch_size=batch_size, jit=jit_compile)
+    train_model(batch_size=batch_size, accumulation_steps=accumulation, jit=jit_compile)
