@@ -65,20 +65,23 @@ class DeformableConv2D(Layer):
         group_inputs = tf.split(inputs, self.num_groups, axis=-1)
         group_outputs = []
 
+        # Process each group sequentially with dependencies
         for i in range(self.num_groups):
-            # Calculate the offset for each group only once and apply to all channels in that group
-            offsets = self.conv_offset_groups[i](group_inputs[i])
+            with tf.control_dependencies(group_outputs):
+                # Calculate the offset for the current group
+                offsets = self.conv_offset_groups[i](group_inputs[i])
 
-            # Sample using the same offset map for all channels in the group
-            sampled_values = self._sample_with_offsets(group_inputs[i], offsets)
+                # Sample using the offset map for this group
+                sampled_values = self._sample_with_offsets(group_inputs[i], offsets)
 
-            # Apply the group convolution to the sampled values
-            group_output = self.conv_groups[i](sampled_values)
-            group_outputs.append(group_output)
+                # Apply the group convolution to the sampled values
+                group_output = self.conv_groups[i](sampled_values)
+                group_outputs.append(group_output)  # Store result for each group
 
-        # Concatenate group outputs along the channel axis
+        # Concatenate group outputs along the channel axis at the end
         outputs = tf.concat(group_outputs, axis=-1)
         return outputs
+
 
     @tf.function
     def _sample_with_offsets(self, inputs, offsets):
