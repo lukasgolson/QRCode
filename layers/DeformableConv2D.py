@@ -19,7 +19,7 @@ class DeformableConv2D(Layer):
                 kernel_size=kernel_size,
                 padding="same",
                 kernel_initializer=Zeros(),
-                dtype="float16",  # Set float16 precision for offsets
+                dtype=self.compute_dtype,
             ) for _ in range(num_groups)
         ]
 
