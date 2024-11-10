@@ -6,6 +6,7 @@ from pathlib import Path
 import keras
 import tensorflow as tf
 from keras import Model
+from keras.api import mixed_precision
 from keras.src import layers
 from keras.src.layers import BatchNormalization, LayerNormalization, Conv2D, Concatenate
 from keras.src.optimizers import Adafactor
@@ -22,13 +23,13 @@ from layers.SpatialAttention import SpatialAttention
 from layers.SpatialTransformer import SpatialTransformer
 from layers.SqueezeExcitation import SqueezeExcitation
 
+# Enable mixed precision
+
+keras.config.set_dtype_policy("mixed_float16")
 
 def Conv2DSkip(input_layer, filters, kernel_size, padding='same', coordConv=False):
-    # Perform convolution on the input layer
-
-    # Create a skip connection
+    # Define the convolutional skip layer with Squeeze Excitation
     skip = input_layer
-
     if skip.shape[-1] != filters:
         skip = layers.Conv2D(filters, kernel_size=(1, 1), padding=padding)(skip)
 
@@ -38,113 +39,71 @@ def Conv2DSkip(input_layer, filters, kernel_size, padding='same', coordConv=Fals
         x = layers.Conv2D(filters, kernel_size, padding=padding)(input_layer)
 
     x = layers.LeakyReLU()(x)
-
     x = SqueezeExcitation()(x)
-
-    # Add the skip connection to the output of the convolutional layer
     x = layers.Add()([skip, x])
     x = layers.LeakyReLU()(x)
-
-    # Apply the activation function after the addition
     return x
 
-
 def create_generator(input_shape):
-    # Define the input layer
     inputs = layers.Input(shape=input_shape)
-
     x = inputs
-
     localCnn = layers.Conv2D(8, 3, padding='same')(x)
     globalCnn = layers.Conv2D(8, 3, padding='same')(localCnn)
-
     x = Concatenate(axis=-1)([localCnn, globalCnn])
-
     x = Conv2DSkip(x, 32, 3, coordConv=True)
-
     x = DeformableConv2D(64, 3, 4)(x)
-
     x = layers.LeakyReLU()(x)
-
-    output = Conv2D(1, 1, padding='same', activation='sigmoid')(x)
-
-    # Define the model
+    output = Conv2D(1, 1, padding='same', activation='sigmoid', dtype='float32')(x)
     model = Model(inputs, output, name='qr_correction_model')
-
     return model
-
 
 def create_discriminator(input_shape):
     dirty_inputs = layers.Input(shape=input_shape, name='dirty_input')
     clean_inputs = layers.Input(shape=input_shape, name='clean_input')
-
-    # Concatenate inputs along the channel axis
     inputs = layers.Concatenate(axis=-1)([dirty_inputs, clean_inputs])
-
     x = CoordConv(32, 3)(inputs)
-
     x = layers.LeakyReLU()(x)
-
-    # downsample
     x = layers.Conv2D(32, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
-
     x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
-
     x = layers.Conv2D(128, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
-
     x = layers.Conv2D(256, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
-
     gap = layers.GlobalAveragePooling2D()(x)
     gmp = layers.GlobalMaxPooling2D()(x)
     x = layers.concatenate([gap, gmp])
-
     x = layers.Dense(256)(x)
     x = layers.LeakyReLU()(x)
     x = layers.Dense(128)(x)
-
-    x = layers.Dense(1)(x)  # Output layer for binary classification
-
+    x = layers.Dense(1, dtype='float32')(x)
     model = Model(inputs=[dirty_inputs, clean_inputs], outputs=x, name='discriminator_model')
     return model
-
 
 @tf.function
 @keras.saving.register_keras_serializable()
 def mse_loss(y_true, y_pred):
     return tf.reduce_mean(tf.square(y_true - y_pred))
 
-
 @tf.function
 def gradient_penalty(critic, dirty_images, real_images, fake_images):
     batch_size = tf.shape(real_images)[0]
     epsilon = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
-
-    # Interpolate between real and fake clean images
     interpolated_clean_images = epsilon * real_images + (1 - epsilon) * fake_images
-
     with tf.GradientTape() as gp_tape:
         gp_tape.watch(interpolated_clean_images)
-        # Critic prediction on interpolated images with dirty images fixed
         pred = critic([dirty_images, interpolated_clean_images], training=True)
-
     grads = gp_tape.gradient(pred, [interpolated_clean_images])[0]
     grad_l2 = tf.sqrt(tf.reduce_sum(tf.square(grads), axis=[1, 2, 3]))
     gp = tf.reduce_mean((grad_l2 - 1.0) ** 2)
     return gp
 
-
 def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
               log_interval=10, steps_per_epoch=250, steps_per_log=10, disc_steps=3, lambda_l1=0.1, lambda_gp=10.0,
-              accumulation_steps=4):  # New parameter for gradient accumulation steps
-    # Ensure callbacks are a list
+              accumulation_steps=4):
     if not isinstance(callbacks, list):
         callbacks = [callbacks]
-
-    print("Callbacks: ", callbacks)
 
     callback_list = tf.keras.callbacks.CallbackList(
         callbacks, add_history=True, model=generator)
@@ -158,7 +117,6 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
     generator.summary()
     discriminator.summary()
 
-    # Initialize gradient accumulation variables
     accumulated_grads_g = [tf.zeros_like(var) for var in generator.trainable_variables]
     accumulated_grads_d = [tf.zeros_like(var) for var in discriminator.trainable_variables]
 
@@ -189,8 +147,6 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
                 d_loss = tf.reduce_mean(fake_pred) - tf.reduce_mean(real_pred) + identity_loss + lambda_gp * gp
 
             grads_d = tape_d.gradient(d_loss, discriminator.trainable_variables)
-
-            # Accumulate gradients
             accumulated_grads_d = [
                 accum_grad + (grad if grad is not None else tf.zeros_like(accum_grad))
                 for accum_grad, grad in zip(accumulated_grads_d, grads_d)
@@ -216,26 +172,22 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
 
             # Apply gradients after accumulation steps
             if (step + 1) % accumulation_steps == 0:
-                # Apply accumulated gradients to the discriminator
                 disc_optimizer.apply_gradients(
                     [(grad / accumulation_steps, var) for grad, var in zip(accumulated_grads_d, discriminator.trainable_variables)]
                 )
                 accumulated_grads_d = [tf.zeros_like(var) for var in discriminator.trainable_variables]
 
-                # Apply accumulated gradients to the generator
                 gen_optimizer.apply_gradients(
                     [(grad / accumulation_steps, var) for grad, var in zip(accumulated_grads_g, generator.trainable_variables)]
                 )
                 accumulated_grads_g = [tf.zeros_like(var) for var in generator.trainable_variables]
 
-            # Trigger callbacks
             logs = {'d_loss': d_loss, 'g_loss': g_loss}
             callback_list.on_train_batch_end(step, logs=logs)
 
             if step % log_interval == 0:
                 print(f"Step: {step + log_interval}/{steps_in_epoch}, D Loss: {d_loss:.4f}, G Loss: {g_loss:.4f}")
 
-        # Validation step
         val_mse = 0
         val_step = 0
         for val_step, (val_real_images, val_dirty_images) in enumerate(val_dataset.take(steps_in_val)):
@@ -252,22 +204,14 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
 
     callback_list.on_train_end(logs=logs)
 
-
 def train_model(resolution=256, epochs=100, batch_size=32, accumulation_steps=4, jit=False):
     strategy = tf.distribute.MirroredStrategy()
-
-    # with strategy.scope():
     generator = create_generator((resolution, resolution, 1))
-
     if not Path("models").exists():
         mkdir("models")
         print("Directory 'models' created")
     generator.save("models/qr_correction_model.keras")
-
-    # create models directory if it doesn't exist
-
     discriminator = create_discriminator((resolution, resolution, 1))
-
     dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size,
                                      noisiest_epoch=0)
     val_dataset = Dataset.create_dataset(paired=True, target_size=(resolution, resolution), batch_size=batch_size,
@@ -283,6 +227,10 @@ def train_model(resolution=256, epochs=100, batch_size=32, accumulation_steps=4,
     gen_optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4, beta_1=0.0, beta_2=0.9)
     disc_optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4, beta_1=0.0, beta_2=0.9)
 
+    # Wrap optimizers with LossScaleOptimizer for mixed precision
+    gen_optimizer = mixed_precision.LossScaleOptimizer(gen_optimizer)
+    disc_optimizer = mixed_precision.LossScaleOptimizer(disc_optimizer)
+
     jit = jit if jit else "auto"
 
     train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
@@ -291,17 +239,13 @@ def train_model(resolution=256, epochs=100, batch_size=32, accumulation_steps=4,
     generator.save('qr_correction_model.keras')
     discriminator.save('discriminator_model.keras')
 
-
 if __name__ == '__main__':
-    # get batch size argument
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--accumulation_steps", type=int, default=4)
     parser.add_argument("-JIT", nargs="?", default=False, const=True, type=bool,
                         help="Enable Just-In-Time compilation.")
-
     batch_size = parser.parse_args().batch_size
     jit_compile = parser.parse_args().JIT
     accumulation = parser.parse_args().accumulation_steps
-
     train_model(batch_size=batch_size, accumulation_steps=accumulation, jit=jit_compile)

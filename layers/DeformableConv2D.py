@@ -47,6 +47,7 @@ class DeformableConv2D(Layer):
 
         super(DeformableConv2D, self).build(input_shape)
 
+    @tf.function
     def call(self, inputs):
         group_inputs = tf.split(inputs, self.num_groups, axis=-1)
         group_outputs = []
