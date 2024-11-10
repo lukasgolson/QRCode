@@ -12,8 +12,6 @@ class DeformableConv2D(Layer):
         self.offset_channels = 2 * kernel_size * kernel_size
         self.group_filters = filters // num_groups
 
-
-
         # Offset convolution layers for each group
         self.conv_offset_groups = [
             Conv2D(
@@ -21,6 +19,7 @@ class DeformableConv2D(Layer):
                 kernel_size=kernel_size,
                 padding="same",
                 kernel_initializer=Zeros(),
+                dtype="float16",  # Set float16 precision for offsets
             ) for _ in range(num_groups)
         ]
 
@@ -37,11 +36,7 @@ class DeformableConv2D(Layer):
         batch_size, height, width, channels = input_shape
         assert channels % self.num_groups == 0, "Channels must be divisible by num_groups"
 
-
-
         self.group_channels = channels // self.num_groups
-
-
 
         # Build offset and convolution layers for each group
         for conv_offset in self.conv_offset_groups:
@@ -53,18 +48,17 @@ class DeformableConv2D(Layer):
         super(DeformableConv2D, self).build(input_shape)
 
     def call(self, inputs):
-        # Split channels into groups
         group_inputs = tf.split(inputs, self.num_groups, axis=-1)
         group_outputs = []
 
-        # Process each group independently to reduce memory load
+        # Process each group independently
         for i in range(self.num_groups):
-            offsets = self.conv_offset_groups[i](group_inputs[i])
-            sampled_values = self._sample_with_offsets(group_inputs[i], offsets)
+            offsets = tf.cast(self.conv_offset_groups[i](group_inputs[i]), dtype=tf.float16)  # Ensure offsets are float16
+            sampled_values = self._sample_with_offsets(tf.cast(group_inputs[i], dtype=tf.float16), offsets)
             group_output = self.conv_groups[i](sampled_values)
             group_outputs.append(group_output)
 
-        # Concatenate group outputs along the channel axis at the end
+        # Concatenate group outputs
         outputs = tf.concat(group_outputs, axis=-1)
         return outputs
 
@@ -72,27 +66,28 @@ class DeformableConv2D(Layer):
     def _sample_with_offsets(self, inputs, offsets):
         batch_size, height, width, channels = tf.shape(inputs)[0], tf.shape(inputs)[1], tf.shape(inputs)[2], inputs.shape[3]
 
-        # Generate kernel grid offsets (recompute each call to reduce memory)
-        kernel_grid = self._get_kernel_grid()
+        # Generate kernel grid offsets in float16
+        kernel_grid = tf.cast(self._get_kernel_grid(), dtype=tf.float16)
         kernel_grid = tf.reshape(kernel_grid, [1, 1, 1, self.kernel_size * self.kernel_size, 2])
 
-        # Prepare the grid
+        # Prepare the grid (using float32 for tf.range and casting later)
         grid_y, grid_x = tf.meshgrid(
             tf.range(height, dtype=tf.float32), tf.range(width, dtype=tf.float32), indexing="ij"
         )
         grid = tf.stack((grid_x, grid_y), axis=-1)
+        grid = tf.cast(grid, dtype=tf.float16)  # Cast the grid to float16 here
         grid = tf.expand_dims(grid, axis=0)
 
-        # Reshape offsets to apply one shared mask per group
+        # Reshape offsets
         offsets = tf.reshape(offsets, [batch_size, height, width, self.kernel_size * self.kernel_size, 2])
 
-        # Compute sampling locations by adding the offsets
+        # Compute sampling locations
         sampling_locations = grid[:, :, :, None, :] + kernel_grid + offsets
 
-        # Clip sampling locations to stay within bounds
+        # Clip sampling locations
         sampling_locations = tf.stack([
-            tf.clip_by_value(sampling_locations[..., 0], 0, tf.cast(width - 1, tf.float32)),
-            tf.clip_by_value(sampling_locations[..., 1], 0, tf.cast(height - 1, tf.float32))
+            tf.clip_by_value(sampling_locations[..., 0], 0, tf.cast(width - 1, tf.float16)),
+            tf.clip_by_value(sampling_locations[..., 1], 0, tf.cast(height - 1, tf.float16))
         ], axis=-1)
 
         # Flatten sampling locations for interpolation
@@ -100,13 +95,14 @@ class DeformableConv2D(Layer):
             sampling_locations, [batch_size, height * width * self.kernel_size * self.kernel_size, 2]
         )
 
-        # Perform interpolation with memory batching
-        sampled_values = self._batched_bilinear_interpolate(inputs, sampling_locations)
+        # Perform interpolation with float16 precision
+        sampled_values = self._batched_bilinear_interpolate(tf.cast(inputs, dtype=tf.float16), sampling_locations)
 
-        # Reshape sampled values to [batch_size, height, width, kernel_size * kernel_size * channels]
+        # Reshape sampled values
         return tf.reshape(
             sampled_values, [batch_size, height, width, self.kernel_size * self.kernel_size * channels]
         )
+
 
     @tf.function
     def _get_kernel_grid(self):
@@ -114,15 +110,15 @@ class DeformableConv2D(Layer):
         x = tf.linspace(-offset, offset, self.kernel_size)
         y = tf.linspace(-offset, offset, self.kernel_size)
         x_grid, y_grid = tf.meshgrid(x, y)
-        return tf.reshape(tf.stack([x_grid, y_grid], axis=-1), [-1, 2])
+        return tf.cast(tf.reshape(tf.stack([x_grid, y_grid], axis=-1), [-1, 2]), dtype=tf.float16)
 
     @tf.function
     def _batched_bilinear_interpolate(self, inputs, sampling_locations):
         batch_size, height, width, channels = tf.shape(inputs)[0], tf.shape(inputs)[1], tf.shape(inputs)[2], inputs.shape[3]
         num_sampling_points = tf.shape(sampling_locations)[1]
 
-        x = sampling_locations[..., 0]
-        y = sampling_locations[..., 1]
+        x = tf.cast(sampling_locations[..., 0], dtype=tf.float16)
+        y = tf.cast(sampling_locations[..., 1], dtype=tf.float16)
 
         x0 = tf.floor(x)
         x1 = x0 + 1
@@ -130,10 +126,10 @@ class DeformableConv2D(Layer):
         y1 = y0 + 1
 
         # Clip coordinates
-        x0 = tf.clip_by_value(x0, 0, tf.cast(width - 1, tf.float32))
-        x1 = tf.clip_by_value(x1, 0, tf.cast(width - 1, tf.float32))
-        y0 = tf.clip_by_value(y0, 0, tf.cast(height - 1, tf.float32))
-        y1 = tf.clip_by_value(y1, 0, tf.cast(height - 1, tf.float32))
+        x0 = tf.clip_by_value(x0, 0, tf.cast(width - 1, tf.float16))
+        x1 = tf.clip_by_value(x1, 0, tf.cast(width - 1, tf.float16))
+        y0 = tf.clip_by_value(y0, 0, tf.cast(height - 1, tf.float16))
+        y1 = tf.clip_by_value(y1, 0, tf.cast(height - 1, tf.float16))
 
         # Bilinear interpolation weights
         wa = (x1 - x) * (y1 - y)
@@ -141,7 +137,7 @@ class DeformableConv2D(Layer):
         wc = (x - x0) * (y1 - y)
         wd = (x - x0) * (y - y0)
 
-        # Reshape indices for gather
+        # Convert indices to int32 for gathering
         x0, x1 = tf.cast(x0, tf.int32), tf.cast(x1, tf.int32)
         y0, y1 = tf.cast(y0, tf.int32), tf.cast(y1, tf.int32)
 
@@ -157,20 +153,19 @@ class DeformableConv2D(Layer):
         idx_c = base + y0 * width + x1
         idx_d = base + y1 * width + x1
 
-        # Perform gather for each corner and apply weights
+        # Gather and apply weights
         Ia = tf.gather(inputs_flat, tf.reshape(idx_a, [-1]))
         Ib = tf.gather(inputs_flat, tf.reshape(idx_b, [-1]))
         Ic = tf.gather(inputs_flat, tf.reshape(idx_c, [-1]))
         Id = tf.gather(inputs_flat, tf.reshape(idx_d, [-1]))
 
-        # Reshape to [batch, sampling_points, channels]
+        # Reshape and apply weights
         Ia = tf.reshape(Ia, [batch_size, num_sampling_points, channels])
         Ib = tf.reshape(Ib, [batch_size, num_sampling_points, channels])
         Ic = tf.reshape(Ic, [batch_size, num_sampling_points, channels])
         Id = tf.reshape(Id, [batch_size, num_sampling_points, channels])
 
-        # Apply interpolation weights and combine
-        wa, wb, wc, wd = tf.expand_dims(wa, axis=-1), tf.expand_dims(wb, axis=-1), tf.expand_dims(wc, axis=-1), tf.expand_dims(wd, axis=-1)
+        wa, wb, wc, wd = map(lambda w: tf.cast(tf.expand_dims(w, axis=-1), dtype=tf.float16), [wa, wb, wc, wd])
         return wa * Ia + wb * Ib + wc * Ic + wd * Id
 
     def compute_output_shape(self, input_shape):
