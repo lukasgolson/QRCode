@@ -9,11 +9,15 @@ class DeformableConv2D(Layer):
         self.kernel_size = kernel_size
         self.num_groups = num_groups
         self.offset_channels = 2 * kernel_size * kernel_size
-        self.group_filters = filters // num_groups
-        self.group_offset_channels = self.offset_channels
 
+        # Number of filters per group
+        self.group_filters = filters // num_groups
+        self.group_offset_channels = self.offset_channels  # One offset map per group
+
+        # Initial 1x1 convolution to recombine channels for grouping
         self.initial_conv_layer = None
 
+        # Offset convolution layers - one per group
         self.conv_offset_groups = [
             Conv2D(
                 self.group_offset_channels,
@@ -22,6 +26,8 @@ class DeformableConv2D(Layer):
                 kernel_initializer=Zeros(),
             ) for _ in range(num_groups)
         ]
+
+        # Convolutional layers for each group
         self.conv_groups = [
             Conv2D(
                 self.group_filters,
@@ -34,10 +40,10 @@ class DeformableConv2D(Layer):
         batch_size, height, width, channels = input_shape
 
         self.initial_conv_layer = Conv2D(
-            input_shape[-1],
+            filters=input_shape[-1],
             kernel_size=1,
             padding="same"
-        ) # This is the initial convolution layer that will be applied to the input to re-arrange the channels
+        )
 
         assert channels % self.num_groups == 0, "Channels must be divisible by num_groups"
         self.group_channels = channels // self.num_groups
@@ -50,18 +56,25 @@ class DeformableConv2D(Layer):
         super(DeformableConv2D, self).build(input_shape)
 
     def call(self, inputs):
-
+        # Initial convolution to adjust channel arrangement
         inputs = self.initial_conv_layer(inputs)
 
+        # Split channels into groups
         group_inputs = tf.split(inputs, self.num_groups, axis=-1)
         group_outputs = []
 
         for i in range(self.num_groups):
+            # Calculate the offset for each group only once
             offsets = self.conv_offset_groups[i](group_inputs[i])
+
+            # Sample using the same offset map for all channels in the group
             sampled_values = self._sample_with_offsets(group_inputs[i], offsets)
+
+            # Apply group convolution to the sampled values
             group_output = self.conv_groups[i](sampled_values)
             group_outputs.append(group_output)
 
+        # Concatenate group outputs along the channel axis
         outputs = tf.concat(group_outputs, axis=-1)
         return outputs
 
@@ -75,6 +88,7 @@ class DeformableConv2D(Layer):
         grid = tf.stack((grid_x, grid_y), axis=-1)  # Shape: [height, width, 2]
         grid = tf.expand_dims(grid, axis=0)  # Shape: [1, height, width, 2]
 
+        # Reshape offsets for single mask across group channels
         offsets = tf.reshape(
             offsets, [batch_size, height, width, self.kernel_size * self.kernel_size, 2]
         )
