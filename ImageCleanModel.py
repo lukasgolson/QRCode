@@ -61,31 +61,17 @@ def create_generator(input_shape):
 
     x = Concatenate(axis=-1)([localCnn, globalCnn, harmonic])
 
-    x = DeformableConv2D(32, 3, 4)(x)
+    x = DeformableConv2D(16, 3, 2)(x)
 
     x = layers.LeakyReLU()(x)
-
-
 
     x = Conv2DSkip(x, 48, 3)
 
-
     x = layers.LeakyReLU()(x)
 
+    x = Conv2DSkip(x, 64, 3)
 
-    x = Conv2DSkip(x, 48, 3)
-
-    x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
-
-    # x = HarmonicConv2D(32, 3)(x)
-
-    x = DeformableConv2D(64, 3, 4)(x)
-
-
-    # upscale
-    x = layers.Conv2DTranspose(32, 3, strides=2, padding='same')(x)
-    x = Conv2DSkip(x, 32, 3)
 
     output = Conv2D(1, 1, padding='same', activation='sigmoid')(x)
 
@@ -113,11 +99,6 @@ def create_discriminator(input_shape):
     x = layers.LeakyReLU()(x)
 
     x = layers.Conv2D(32, 3, strides=2, padding='same')(x)
-
-
-    x = layers.LeakyReLU()(x)
-
-    x = DeformableConv2D(32, 3, 4)(x)
 
     x = layers.LeakyReLU()(x)
 
