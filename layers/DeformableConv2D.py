@@ -56,6 +56,7 @@ class DeformableConv2D(Layer):
 
         super(DeformableConv2D, self).build(input_shape)
 
+    @tf.function
     def call(self, inputs):
         # Initial convolution to adjust channel arrangement
         inputs = self.initial_conv_layer(inputs)
@@ -79,6 +80,7 @@ class DeformableConv2D(Layer):
         outputs = tf.concat(group_outputs, axis=-1)
         return outputs
 
+    @tf.function
     def _sample_with_offsets(self, inputs, offsets):
         batch_size, height, width, channels = tf.shape(inputs)[0], tf.shape(inputs)[1], tf.shape(inputs)[2], inputs.shape[3]
 
@@ -126,6 +128,7 @@ class DeformableConv2D(Layer):
 
         return sampled_values
 
+    @tf.function
     def _get_kernel_grid(self):
         offset = (self.kernel_size - 1) / 2.0
         x = tf.linspace(-offset, offset, self.kernel_size)
@@ -134,6 +137,8 @@ class DeformableConv2D(Layer):
         kernel_grid = tf.stack([x_grid, y_grid], axis=-1)
         kernel_grid = tf.reshape(kernel_grid, [-1, 2])  # Shape: [kernel_size * kernel_size, 2]
         return kernel_grid
+
+    @tf.function
 
     def _bilinear_interpolate(self, inputs, sampling_locations):
         batch_size, height, width, channels = tf.shape(inputs)[0], tf.shape(inputs)[1], tf.shape(inputs)[2], inputs.shape[3]

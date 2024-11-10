@@ -55,27 +55,27 @@ def create_generator(input_shape):
 
     x = inputs
 
-    harmonics = HarmonicConv2D(4, 3)(x)
+    harmonics = HarmonicConv2D(16, 3)(x)
     localCnn = layers.Conv2D(8, 3, padding='same')(x)
-    globalCnn = layers.Conv2D(4, 3, padding='same')(localCnn)
+    globalCnn = layers.Conv2D(8, 3, padding='same')(localCnn)
 
     x = Concatenate(axis=-1)([localCnn, globalCnn, harmonics])
 
-    x = Conv2DSkip(x, 32, 3)
+    x = Conv2DSkip(x, 48, 3)
 
 
     x = layers.LeakyReLU()(x)
 
-    x = DeformableConv2D(48, 3, 4)(x)
+    x = DeformableConv2D(64, 3, 4)(x)
 
-    x = Conv2DSkip(x, 64, 3)
+    x = Conv2DSkip(x, 96, 3)
 
-    x = layers.Conv2D(96, 3, strides=2, padding='same')(x)
+    x = layers.Conv2D(128, 3, strides=2, padding='same')(x)
     x = layers.LeakyReLU()(x)
 
     # x = HarmonicConv2D(32, 3)(x)
 
-    x = DeformableConv2D(64, 3, 4)(x)
+    x = DeformableConv2D(128, 3, 4)(x)
 
 
     # upscale
@@ -95,23 +95,28 @@ def create_discriminator(input_shape):
     clean_inputs = layers.Input(shape=input_shape, name='clean_input')
 
     # Concatenate inputs along the channel axis
-    x = layers.Concatenate(axis=-1)([dirty_inputs, clean_inputs])
+    inputs = layers.Concatenate(axis=-1)([dirty_inputs, clean_inputs])
 
-    harmonics = HarmonicConv2D(8, 3)(x)
-    x = Concatenate(axis=-1)([x, harmonics])
+    harmonics = HarmonicConv2D(8, 3)(inputs)
 
-    x = layers.Conv2D(16, 3, strides=2, padding='same')(x)
-    x = layers.LeakyReLU()(x)
+    conv = layers.Conv2D(8, 3, padding='same')(inputs)
+
+    x = Concatenate(axis=-1)([conv, harmonics])
 
     x = CoordConv(32, 3)(x)
 
     x = layers.LeakyReLU()(x)
 
-    x = DeformableConv2D(48, 3, 4)(x)
+    x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
+
 
     x = layers.LeakyReLU()(x)
 
-    x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
+    x = DeformableConv2D(96, 3, 8)(x)
+
+    x = layers.LeakyReLU()(x)
+
+    x = layers.Conv2D(128, 3, padding='same')(x)
 
     x = layers.LeakyReLU()(x)
 
@@ -121,6 +126,7 @@ def create_discriminator(input_shape):
 
     x = layers.Dense(512)(x)
     x = layers.LeakyReLU()(x)
+    x = layers.Dense(256)(x)
 
     x = layers.Dense(1)(x)  # Output layer for binary classification
 
