@@ -158,7 +158,7 @@ def load_qr_code_data(target_size, batch_size=32, batches_per_epoch=512, encoder
             image_count = images_per_epoch * (noisiest_epoch - 1)
 
 
-def create_dataset(target_size=(512, 512), batch_size=32, shuffle=True, max_seq_len=512, num_chars=128, paired=False,
+def create_dataset(target_size=(512, 512), batch_size=32, shuffle=False, max_seq_len=512, num_chars=128, paired=False,
                    noisiest_epoch=0, batches_per_epoch=512):
     encoder = CharLevelEncoder(max_sequence_length=max_seq_len, num_chars=num_chars)  # Initialize encoder
 
