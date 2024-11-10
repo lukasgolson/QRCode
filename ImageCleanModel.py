@@ -85,13 +85,26 @@ def create_discriminator(input_shape):
 
     x = layers.LeakyReLU()(x)
 
+    # downsample
+    x = layers.Conv2D(32, 3, strides=2, padding='same')(x)
+    x = layers.LeakyReLU()(x)
+
+    x = layers.Conv2D(64, 3, strides=2, padding='same')(x)
+    x = layers.LeakyReLU()(x)
+
+    x = layers.Conv2D(128, 3, strides=2, padding='same')(x)
+    x = layers.LeakyReLU()(x)
+
+    x = layers.Conv2D(256, 3, strides=2, padding='same')(x)
+    x = layers.LeakyReLU()(x)
+
     gap = layers.GlobalAveragePooling2D()(x)
     gmp = layers.GlobalMaxPooling2D()(x)
     x = layers.concatenate([gap, gmp])
 
-    x = layers.Dense(512)(x)
-    x = layers.LeakyReLU()(x)
     x = layers.Dense(256)(x)
+    x = layers.LeakyReLU()(x)
+    x = layers.Dense(128)(x)
 
     x = layers.Dense(1)(x)  # Output layer for binary classification
 
