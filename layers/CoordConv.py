@@ -20,6 +20,7 @@ class CoordConv(Layer):
 
         super(CoordConv, self).build(input_shape)
 
+    @tf.function
     def call(self, inputs):
         # Get dynamic input shape
         batch_size = tf.shape(inputs)[0]
@@ -42,11 +43,15 @@ class CoordConv(Layer):
         coord_channels = tf.expand_dims(coord_channels, axis=0)  # Shape: [1, height, width, 2]
         coord_channels = tf.tile(coord_channels, [batch_size, 1, 1, 1])  # Shape: [batch_size, height, width, 2]
 
+        # Cast coord_channels to the dtype of inputs for compatibility in mixed precision
+        coord_channels = tf.cast(coord_channels, dtype=inputs.dtype)
+
         # Concatenate with the original inputs
         concat_inputs = tf.concat([inputs, coord_channels], axis=-1)
 
         # Apply convolution
         return self.conv(concat_inputs)
+
 
     def get_config(self):
         config = super(CoordConv, self).get_config()
