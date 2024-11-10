@@ -55,11 +55,11 @@ def create_generator(input_shape):
 
     x = inputs
 
-    harmonics = HarmonicConv2D(8, 3)(x)
+    deform = DeformableConv2D(8, 3)(x)
     localCnn = layers.Conv2D(8, 3, padding='same')(x)
     globalCnn = layers.Conv2D(8, 3, padding='same')(localCnn)
 
-    x = Concatenate(axis=-1)([localCnn, globalCnn, harmonics])
+    x = Concatenate(axis=-1)([localCnn, globalCnn, deform])
 
     x = DeformableConv2D(32, 3, 4)(x)
 
@@ -102,11 +102,11 @@ def create_discriminator(input_shape):
     # Concatenate inputs along the channel axis
     inputs = layers.Concatenate(axis=-1)([dirty_inputs, clean_inputs])
 
-    harmonics = HarmonicConv2D(8, 3)(inputs)
+    deform = DeformableConv2D(8, 3)(inputs)
 
     conv = layers.Conv2D(8, 3, padding='same')(inputs)
 
-    x = Concatenate(axis=-1)([conv, harmonics])
+    x = Concatenate(axis=-1)([conv, deform])
 
     x = CoordConv(16, 3)(x)
 
