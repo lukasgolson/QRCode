@@ -111,8 +111,10 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
     accumulated_grads_d = [tf.zeros_like(var) for var in discriminator.trainable_variables]
 
     for epoch in range(epochs):
+        epoch += start_epoch
+
         callback_list.on_epoch_begin(epoch, logs=logs)
-        print(f"Epoch {epoch + 1}/{epochs}")
+        print(f"Epoch {epoch + 1}/{ start_epoch + epochs}")
 
         steps_in_epoch = steps_per_epoch or len(dataset)
         steps_in_val = steps_per_log or len(val_dataset)
