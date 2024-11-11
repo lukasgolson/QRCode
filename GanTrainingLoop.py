@@ -1,5 +1,6 @@
 import json
 import os
+import pickle
 
 import keras
 import tensorflow as tf
@@ -34,12 +35,15 @@ def save_training_state(generator, discriminator, gen_optimizer, disc_optimizer,
     discriminator.save(os.path.join(checkpoint_dir, f'discriminator_epoch_{epoch}.keras'))
 
     # Save optimizer states
-    gen_optimizer_weights = gen_optimizer.get_weights()
-    disc_optimizer_weights = disc_optimizer.get_weights()
-    with open(os.path.join(checkpoint_dir, f'optimizer_gen_epoch_{epoch}.json'), 'w') as f:
-        json.dump(gen_optimizer_weights, f)
-    with open(os.path.join(checkpoint_dir, f'optimizer_disc_epoch_{epoch}.json'), 'w') as f:
-        json.dump(disc_optimizer_weights, f)
+    gen_optimizer_config = gen_optimizer.get_config()
+    disc_optimizer_config = disc_optimizer.get_config()
+
+    # save with pickle
+    with open(os.path.join(checkpoint_dir, f'optimizer_gen_epoch_{epoch}.pkl'), 'wb') as f:
+        pickle.dump(gen_optimizer_config, f)
+
+    with open(os.path.join(checkpoint_dir, f'optimizer_disc_epoch_{epoch}.pkl'), 'wb') as f:
+        pickle.dump(disc_optimizer_config, f)
 
     # Save the last epoch number
     with open(os.path.join(checkpoint_dir, 'last_epoch.txt'), 'w') as f:
@@ -60,10 +64,16 @@ def load_training_state(generator, discriminator, gen_optimizer, disc_optimizer,
             os.path.join(checkpoint_dir, f'discriminator_epoch_{last_epoch}.keras'))
 
         # Load optimizer states
-        with open(os.path.join(checkpoint_dir, f'optimizer_gen_epoch_{last_epoch}.json'), 'r') as f:
-            gen_optimizer.set_weights(json.load(f))
-        with open(os.path.join(checkpoint_dir, f'optimizer_disc_epoch_{last_epoch}.json'), 'r') as f:
-            disc_optimizer.set_weights(json.load(f))
+        with open(os.path.join(checkpoint_dir, f'optimizer_gen_epoch_{last_epoch}.pkl'), 'rb') as f:
+            gen_optimizer_config = pickle.load(f)
+
+        with open(os.path.join(checkpoint_dir, f'optimizer_disc_epoch_{last_epoch}.pkl'), 'rb') as f:
+            disc_optimizer_config = pickle.load(f)
+
+        # Load optimizer states
+        gen_optimizer = gen_optimizer.from_config(gen_optimizer_config)
+
+        disc_optimizer = disc_optimizer.from_config(disc_optimizer_config)
 
         return generator, discriminator, gen_optimizer, disc_optimizer, last_epoch
     else:
