@@ -24,7 +24,7 @@ from layers.SqueezeExcitation import SqueezeExcitation
 keras.config.set_dtype_policy("mixed_float16")
 
 
-def residual_block(x, filters, kernel_size=3, use_SE=True):
+def residual_block(x, filters, kernel_size=3, use_squeeze_excitation=True):
     """ Residual block with optional Squeeze-and-Excitation and channel matching """
     skip = x
     # Adjust skip connection to match the number of filters if necessary
@@ -37,94 +37,100 @@ def residual_block(x, filters, kernel_size=3, use_SE=True):
     x = Conv2D(filters, kernel_size, padding='same')(x)
 
     # Optional Squeeze-and-Excitation
-    if use_SE:
+    if use_squeeze_excitation:
         x = SqueezeExcitation()(x)
 
     # Add skip connection
     x = Add()([skip, x])
     return x
 
-
 def create_generator(input_shape):
     inputs = Input(shape=input_shape)
 
     # Initial Encoder Layer with CoordConv
-    x1 = CoordConv(16, 3, padding='same')(inputs)
-    x1 = residual_block(x1, 16)
-    x1 = DeformableConv2D(16, 3, 1)(x1)  # First deformable conv
+    x1 = CoordConv(32, 3, padding='same')(inputs)  # Increased initial filters
+    x1 = residual_block(x1, 32)
+    x1 = DeformableConv2D(32, 3, 1)(x1)
     x1 = LeakyReLU()(x1)
 
-    x2 = MaxPooling2D()(x1)  # Downscale
-    x2 = Conv2D(32, 3, padding='same')(x2)
-    x2 = residual_block(x2, 32, use_SE=True)
-    x2 = DeformableConv2D(32, 3, 1)(x2)  # Second deformable conv
+    x2 = MaxPooling2D()(x1)
+    x2 = Conv2D(64, 3, padding='same')(x2)  # Increased filters in encoder
+    x2 = residual_block(x2, 64, use_squeeze_excitation=True)
+    x2 = DeformableConv2D(64, 3, 1)(x2)
     x2 = LeakyReLU()(x2)
 
-    x3 = MaxPooling2D()(x2)  # Downscale
-    x3 = Conv2D(64, 3, padding='same')(x3)
-    x3 = residual_block(x3, 64, use_SE=True)
+    x3 = MaxPooling2D()(x2)
+    x3 = Conv2D(128, 3, padding='same')(x3)  # Increased filters
+    x3 = residual_block(x3, 128, use_squeeze_excitation=True)
 
-    # Bottleneck with CoordConv and Deformable Conv
-    x4 = MaxPooling2D()(x3)  # Downscale
-    x4 = CoordConv(128, 3, padding='same')(x4)
-    x4 = residual_block(x4, 128)
-    x4 = DeformableConv2D(128, 3, 1)(x4)  # Bottleneck deformable conv
+    # Enhanced Bottleneck with higher filters and additional layer
+    x4 = MaxPooling2D()(x3)
+    x4 = CoordConv(192, 3, padding='same')(x4)  # Higher bottleneck filters
+    x4 = residual_block(x4, 192)
+    x4 = DeformableConv2D(192, 3, 1)(x4)
+    x4 = Conv2D(192, 3, padding='same')(x4)  # Additional Conv layer
     x4 = LeakyReLU()(x4)
 
-    # Decoder: Upsample to match encoder dimensions before concatenation
-    x5 = UpSampling2D()(x4)  # Upscale to match x3
-    x5 = Concatenate()([x5, x3])  # Skip connection
-    x5 = Conv2D(64, 3, padding='same')(x5)
-    x5 = residual_block(x5, 64, use_SE=True)
+    # Decoder with higher filters
+    x5 = UpSampling2D()(x4)
+    x5 = Concatenate()([x5, x3])
+    x5 = Conv2D(128, 3, padding='same')(x5)
+    x5 = residual_block(x5, 128, use_squeeze_excitation=True)
 
-    x6 = UpSampling2D()(x5)  # Upscale to match x2
-    x6 = Concatenate()([x6, x2])  # Skip connection
-    x6 = Conv2D(32, 3, padding='same')(x6)
-    x6 = residual_block(x6, 32, use_SE=True)
+    x6 = UpSampling2D()(x5)
+    x6 = Concatenate()([x6, x2])
+    x6 = Conv2D(64, 3, padding='same')(x6)
+    x6 = residual_block(x6, 64, use_squeeze_excitation=True)
 
-    x7 = UpSampling2D()(x6)  # Upscale to match x1
-    x7 = Concatenate()([x7, x1])  # Skip connection
-    x7 = Conv2D(16, 3, padding='same')(x7)
-    x7 = residual_block(x7, 16)
+    x7 = UpSampling2D()(x6)
+    x7 = Concatenate()([x7, x1])
+    x7 = Conv2D(32, 3, padding='same')(x7)
+    x7 = residual_block(x7, 32)
 
-    # Output layer with CoordConv
-    x7 = CoordConv(16, 3, padding='same')(x7)  # CoordConv before output
-    output = Conv2D(1, 1, padding='same', activation='sigmoid', dtype='float32')(x7)
+    # Output layer
+    x7 = CoordConv(32, 3, padding='same')(x7)
 
-    model = Model(inputs, output, name='qr_correction_model')
+    x7 = LeakyReLU()(x7)
+
+    x8 = Conv2D(16, 2, padding='same')(x7)
+    x8 = LeakyReLU()(x8)
+
+    output = Conv2D(1, 1, padding='same', activation='sigmoid', dtype='float32')(x8)
+
+    model = Model(inputs, output, name='enhanced_generator_model')
     return model
 
 
 def create_discriminator(input_shape):
-    # Define input layers for clean and dirty QR images
     dirty_inputs = Input(shape=input_shape, name='dirty_input')
     clean_inputs = Input(shape=input_shape, name='clean_input')
     inputs = Concatenate(axis=-1)([dirty_inputs, clean_inputs])
 
     # Initial CoordConv for spatial awareness
     x = CoordConv(16, 3, padding='same')(inputs)
-    x = residual_block(x, 16)
 
-    # Downsampling layers with depthwise separable convolutions
-    for filters in [32, 64, 128]:
-        x = DepthwiseConv2D(filters, strides=2, padding='same')(x)
-        x = residual_block(x, filters, use_SE=True)
+    # Reduced filter sizes in deeper layers to decrease complexity
+    for filters in [16, 32, 48]:  # Reduced filters from 16, 32, 64
+        x = DepthwiseConv2D(kernel_size=3, padding='same', strides=2)(x)
+        x = Conv2D(filters, kernel_size=1, padding='same')(x)
+        x = residual_block(x, filters)  # Removed SE layers in initial layers
+        x = LeakyReLU()(x)
 
-    # Additional Conv2D layers for feature extraction with reduced filters
-    for filters in [128, 256]:
-        x = residual_block(x, filters, use_SE=True)
+    # Further reduce filters and remove SE block in final layers
+    for filters in [64, 128]:  # Reduced from 128, 256
         x = Conv2D(filters, 3, strides=2, padding='same')(x)
+        x = residual_block(x, filters, use_squeeze_excitation=True)  # Remove SE here to reduce complexity
         x = LeakyReLU()(x)
 
     # Global pooling and dense layers for binary classification
     x = GlobalMaxPooling2D()(x)
     x = Dense(256)(x)
     x = LeakyReLU()(x)
-    x = Dense(128)(x)
+    x = Dense(64)(x)
     x = LeakyReLU()(x)
-    x = Dense(1, dtype='float32')(x)  # Output for discriminator
+    x = Dense(1, dtype='float32')(x)
 
-    model = Model(inputs=[dirty_inputs, clean_inputs], outputs=x, name='discriminator_model')
+    model = Model(inputs=[dirty_inputs, clean_inputs], outputs=x, name='simplified_discriminator_model')
     return model
 
 
