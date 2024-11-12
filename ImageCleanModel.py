@@ -5,10 +5,11 @@ from pathlib import Path
 
 import keras
 import tensorflow as tf
-from keras import Model
+from keras import Model, Input
 from keras.api import mixed_precision
 from keras.src import layers
-from keras.src.layers import Conv2D, Concatenate
+from keras.src.layers import Conv2D, Concatenate, DepthwiseConv2D, UpSampling2D, LeakyReLU, MaxPooling2D, Add, \
+    GlobalMaxPooling2D, Dense
 from tensorflow.keras.callbacks import TensorBoard
 
 import Dataset
@@ -23,62 +24,106 @@ from layers.SqueezeExcitation import SqueezeExcitation
 keras.config.set_dtype_policy("mixed_float16")
 
 
-def Conv2DSkip(input_layer, filters, kernel_size, padding='same', coordConv=False):
-    # Define the convolutional skip layer with Squeeze Excitation
-    skip = input_layer
+def residual_block(x, filters, kernel_size=3, use_SE=True):
+    """ Residual block with optional Squeeze-and-Excitation and channel matching """
+    skip = x
+    # Adjust skip connection to match the number of filters if necessary
     if skip.shape[-1] != filters:
-        skip = layers.Conv2D(filters, kernel_size=(1, 1), padding=padding)(skip)
+        skip = Conv2D(filters, (1, 1), padding='same')(skip)
 
-    if coordConv:
-        x = CoordConv(filters, kernel_size)(input_layer)
-    else:
-        x = layers.Conv2D(filters, kernel_size, padding=padding)(input_layer)
+    # Apply convolutions
+    x = Conv2D(filters, kernel_size, padding='same')(x)
+    x = LeakyReLU()(x)
+    x = Conv2D(filters, kernel_size, padding='same')(x)
 
-    x = layers.LeakyReLU()(x)
-    x = SqueezeExcitation()(x)
-    x = layers.Add()([skip, x])
-    x = layers.LeakyReLU()(x)
+    # Optional Squeeze-and-Excitation
+    if use_SE:
+        x = SqueezeExcitation()(x)
+
+    # Add skip connection
+    x = Add()([skip, x])
     return x
 
 
 def create_generator(input_shape):
-    inputs = layers.Input(shape=input_shape)
-    x = inputs
-    localCnn = layers.Conv2D(8, 3, padding='same')(x)
-    globalCnn = layers.Conv2D(8, 3, padding='same')(localCnn)
-    x = Concatenate(axis=-1)([localCnn, globalCnn])
+    inputs = Input(shape=input_shape)
 
-    x = DeformableConv2D(16, 3, 1)(x)
-    x = layers.LeakyReLU()(x)
-    x = DeformableConv2D(32, 3, 1)(x)
-    x = layers.LeakyReLU()(x)
-    x = Conv2DSkip(x, 48, 3, coordConv=True)
-    x = Conv2DSkip(x, 64, 3, coordConv=False)
-    x = Conv2DSkip(x, 96, 3, coordConv=False)
-    x = Conv2DSkip(x, 112, 3, coordConv=False)
-    output = Conv2D(1, 1, padding='same', activation='sigmoid', dtype='float32')(x)
+    # Initial Encoder Layer with CoordConv
+    x1 = CoordConv(16, 3, padding='same')(inputs)
+    x1 = residual_block(x1, 16)
+    x1 = DeformableConv2D(16, 3, 1)(x1)  # First deformable conv
+    x1 = LeakyReLU()(x1)
+
+    x2 = MaxPooling2D()(x1)  # Downscale
+    x2 = Conv2D(32, 3, padding='same')(x2)
+    x2 = residual_block(x2, 32, use_SE=True)
+    x2 = DeformableConv2D(32, 3, 1)(x2)  # Second deformable conv
+    x2 = LeakyReLU()(x2)
+
+    x3 = MaxPooling2D()(x2)  # Downscale
+    x3 = Conv2D(64, 3, padding='same')(x3)
+    x3 = residual_block(x3, 64, use_SE=True)
+
+    # Bottleneck with CoordConv and Deformable Conv
+    x4 = MaxPooling2D()(x3)  # Downscale
+    x4 = CoordConv(128, 3, padding='same')(x4)
+    x4 = residual_block(x4, 128)
+    x4 = DeformableConv2D(128, 3, 1)(x4)  # Bottleneck deformable conv
+    x4 = LeakyReLU()(x4)
+
+    # Decoder: Upsample to match encoder dimensions before concatenation
+    x5 = UpSampling2D()(x4)  # Upscale to match x3
+    x5 = Concatenate()([x5, x3])  # Skip connection
+    x5 = Conv2D(64, 3, padding='same')(x5)
+    x5 = residual_block(x5, 64, use_SE=True)
+
+    x6 = UpSampling2D()(x5)  # Upscale to match x2
+    x6 = Concatenate()([x6, x2])  # Skip connection
+    x6 = Conv2D(32, 3, padding='same')(x6)
+    x6 = residual_block(x6, 32, use_SE=True)
+
+    x7 = UpSampling2D()(x6)  # Upscale to match x1
+    x7 = Concatenate()([x7, x1])  # Skip connection
+    x7 = Conv2D(16, 3, padding='same')(x7)
+    x7 = residual_block(x7, 16)
+
+    # Output layer with CoordConv
+    x7 = CoordConv(16, 3, padding='same')(x7)  # CoordConv before output
+    output = Conv2D(1, 1, padding='same', activation='sigmoid', dtype='float32')(x7)
+
     model = Model(inputs, output, name='qr_correction_model')
     return model
 
 
 def create_discriminator(input_shape):
-    dirty_inputs = layers.Input(shape=input_shape, name='dirty_input')
-    clean_inputs = layers.Input(shape=input_shape, name='clean_input')
-    inputs = layers.Concatenate(axis=-1)([dirty_inputs, clean_inputs])
+    # Define input layers for clean and dirty QR images
+    dirty_inputs = Input(shape=input_shape, name='dirty_input')
+    clean_inputs = Input(shape=input_shape, name='clean_input')
+    inputs = Concatenate(axis=-1)([dirty_inputs, clean_inputs])
 
-    x = inputs
+    # Initial CoordConv for spatial awareness
+    x = CoordConv(16, 3, padding='same')(inputs)
+    x = residual_block(x, 16)
 
-    x = Conv2DSkip(x, 16, 3, coordConv=True)
+    # Downsampling layers with depthwise separable convolutions
+    for filters in [32, 64, 128]:
+        x = DepthwiseConv2D(filters, strides=2, padding='same')(x)
+        x = residual_block(x, filters, use_SE=True)
 
-    for i in range(6):
-        x = Conv2DSkip(x, 16 * (i + 1), 3, coordConv=False)
-        x = Conv2D(16 * (i + 1), 3, strides=2, padding='same')(x)
+    # Additional Conv2D layers for feature extraction with reduced filters
+    for filters in [128, 256]:
+        x = residual_block(x, filters, use_SE=True)
+        x = Conv2D(filters, 3, strides=2, padding='same')(x)
+        x = LeakyReLU()(x)
 
-    x = layers.GlobalMaxPooling2D()(x)
-    x = layers.Dense(256)(x)
-    x = layers.LeakyReLU()(x)
-    x = layers.Dense(128)(x)
-    x = layers.Dense(1, dtype='float32')(x)
+    # Global pooling and dense layers for binary classification
+    x = GlobalMaxPooling2D()(x)
+    x = Dense(256)(x)
+    x = LeakyReLU()(x)
+    x = Dense(128)(x)
+    x = LeakyReLU()(x)
+    x = Dense(1, dtype='float32')(x)  # Output for discriminator
+
     model = Model(inputs=[dirty_inputs, clean_inputs], outputs=x, name='discriminator_model')
     return model
 

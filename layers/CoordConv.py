@@ -3,13 +3,14 @@ from tensorflow.keras.layers import Layer, Conv2D
 
 
 class CoordConv(Layer):
-    def __init__(self, filters, kernel_size, **kwargs):
+    def __init__(self, filters, kernel_size, padding='same', **kwargs):
         super(CoordConv, self).__init__(**kwargs)
 
         self.filters = filters
         self.kernel_size = kernel_size
+        self.padding = padding
 
-        self.conv = Conv2D(filters, kernel_size=kernel_size, padding='same')
+        self.conv = Conv2D(filters, kernel_size=kernel_size, padding=padding)
 
     def build(self, input_shape):
         input_channels = input_shape[-1]
@@ -54,5 +55,5 @@ class CoordConv(Layer):
 
     def get_config(self):
         config = super(CoordConv, self).get_config()
-        config.update({"filters": self.filters, "kernel_size": self.kernel_size})
+        config.update({"filters": self.filters, "kernel_size": self.kernel_size, "padding": self.padding})
         return config
