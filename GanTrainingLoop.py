@@ -82,8 +82,6 @@ def load_training_state(generator, discriminator, gen_optimizer, disc_optimizer,
         return generator, discriminator, gen_optimizer, disc_optimizer, 0
 
 
-# Optimized Training Step Functions
-@tf.function
 def generator_step(generator, discriminator, gen_optimizer, dirty_images, accumulation_steps):
     accumulated_grads_g = [tf.zeros_like(var) for var in generator.trainable_variables]
     gen_loss = 0.0
@@ -96,6 +94,7 @@ def generator_step(generator, discriminator, gen_optimizer, dirty_images, accumu
 
         grads_g = tape_g.gradient(g_loss, generator.trainable_variables)
         # Accumulate gradients
+
         accumulated_grads_g = [
             accum_grad + (grad if grad is not None else tf.zeros_like(accum_grad))
             for accum_grad, grad in zip(accumulated_grads_g, grads_g)
@@ -109,8 +108,6 @@ def generator_step(generator, discriminator, gen_optimizer, dirty_images, accumu
     return gen_loss
 
 
-# Define Discriminator Training Step with Gradient Accumulation
-@tf.function
 def discriminator_step(discriminator, generator, disc_optimizer, dirty_images, clean_images, lambda_gp, disc_steps,
                        accumulation_steps):
     disc_loss = 0.0
