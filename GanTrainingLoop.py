@@ -153,8 +153,7 @@ def train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, 
                     generated_images = generator(dirty_images, training=True)
                     gan_output = discriminator([dirty_images, generated_images], training=True)
                     identity_loss = sum(generator.losses)
-                    g_loss = -tf.reduce_mean(gan_output) + lambda_l1 * tf.reduce_mean(
-                        tf.abs(clean_images - generated_images)) + identity_loss
+                    g_loss = -tf.reduce_mean(gan_output) + identity_loss
 
                 grads_g = tape_g.gradient(g_loss, generator.trainable_variables)
                 accumulated_grads_g = [
