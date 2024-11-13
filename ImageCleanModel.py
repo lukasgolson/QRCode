@@ -162,7 +162,7 @@ def train_model(resolution=256, epochs=100, batch_size=32, accumulation_steps=4,
     disc_optimizer = mixed_precision.LossScaleOptimizer(disc_optimizer)
 
     train_gan(generator, discriminator, gen_optimizer, disc_optimizer, dataset, val_dataset, epochs, callbacks,
-              steps_per_epoch=250, accumulation_steps=accumulation_steps, steps_per_log=10, disc_steps=1, lambda_l1=0.1,
+              steps_per_epoch=250, accumulation_steps=accumulation_steps, steps_per_log=10, disc_steps=1,
               resume=resume, checkpoint_dir=checkpoint_dir)
 
     generator.save('qr_correction_model.keras')
