@@ -161,7 +161,7 @@ def train_gan(
     callback_list.on_train_begin(logs=logs)
 
     # Initialize progress bar for monitoring
-    for epoch in range(start_epoch, epochs):
+    for epoch in range(start_epoch, start_epoch + epochs):
         callback_list.on_epoch_begin(epoch, logs=logs)
         print(f"\nEpoch {epoch + 1}/{epochs}")
 
